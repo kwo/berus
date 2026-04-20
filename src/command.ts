@@ -1,6 +1,38 @@
 import { parseArgs, type ParseArgsOptionsConfig } from 'node:util';
 
-export type RunFunc = (cmd: Command, args: string[]) => void | Promise<void>;
+/**
+ * RunState is passed sequentially to all run hooks within a command execution lifecycle
+ * (persistentPreRun, preRun, run, postRun, persistentPostRun).
+ *
+ * It allows storing and retrieving arbitrary data, facilitating shared state
+ * between hooks without requiring global variables or tightly coupled properties.
+ */
+export class RunState {
+  private _state = new Map<string, unknown>();
+
+  set(key: string, value: unknown): void {
+    this._state.set(key, value);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+  get<T>(key: string): T | undefined {
+    return this._state.get(key) as T | undefined;
+  }
+
+  has(key: string): boolean {
+    return this._state.has(key);
+  }
+
+  delete(key: string): boolean {
+    return this._state.delete(key);
+  }
+
+  clear(): void {
+    this._state.clear();
+  }
+}
+
+export type RunFunc = (cmd: Command, args: string[], state: RunState) => void | Promise<void>;
 export type ArgsFunc = (cmd: Command, args: string[]) => Error | undefined;
 type FlagType = 'string' | 'boolean' | 'stringArray';
 type FlagDefault = string | boolean | string[];
@@ -21,18 +53,90 @@ interface CommandGroup {
   title: string;
 }
 
+/**
+ * Interface for defining and retrieving local flags on a command.
+ * Local flags apply only to the specific command they are defined on.
+ */
 interface FlagAccessor {
+  /**
+   * Defines a local string flag.
+   * @param name The full name of the flag (e.g., 'file').
+   * @param short The short name of the flag (e.g., 'f'). Leave empty string for no short flag.
+   * @param defaultValue The default value if the flag is not provided.
+   * @param description The help text for the flag.
+   */
   string: (name: string, short: string, defaultValue: string, description: string) => void;
+
+  /**
+   * Defines a local boolean flag.
+   * @param name The full name of the flag.
+   * @param short The short name of the flag. Leave empty string for no short flag.
+   * @param defaultValue The default value if the flag is not provided.
+   * @param description The help text for the flag.
+   */
   boolean: (name: string, short: string, defaultValue: boolean, description: string) => void;
+
+  /**
+   * Defines a local string array flag, allowing multiple values.
+   * @param name The full name of the flag.
+   * @param short The short name of the flag. Leave empty string for no short flag.
+   * @param defaultValue The default array of strings if the flag is not provided.
+   * @param description The help text for the flag.
+   */
   stringArray: (name: string, short: string, defaultValue: string[], description: string) => void;
+
+  /**
+   * Retrieves the parsed value of a string flag.
+   * @param name The full name of the flag.
+   * @returns The parsed string value, or the default value, or an empty string.
+   */
   getString: (name: string) => string;
+
+  /**
+   * Retrieves the parsed value of a boolean flag.
+   * @param name The full name of the flag.
+   * @returns The parsed boolean value, or the default value, or false.
+   */
   getBoolean: (name: string) => boolean;
+
+  /**
+   * Retrieves the parsed value of a string array flag.
+   * @param name The full name of the flag.
+   * @returns The parsed array of strings, or the default value, or an empty array.
+   */
   getStringArray: (name: string) => string[];
 }
 
+/**
+ * Interface for defining persistent flags on a command.
+ * Persistent flags are inherited by all child commands recursively.
+ */
 interface PersistentFlagAccessor {
+  /**
+   * Defines a persistent string flag.
+   * @param name The full name of the flag.
+   * @param short The short name of the flag. Leave empty string for no short flag.
+   * @param defaultValue The default value if the flag is not provided.
+   * @param description The help text for the flag.
+   */
   string: (name: string, short: string, defaultValue: string, description: string) => void;
+
+  /**
+   * Defines a persistent boolean flag.
+   * @param name The full name of the flag.
+   * @param short The short name of the flag. Leave empty string for no short flag.
+   * @param defaultValue The default value if the flag is not provided.
+   * @param description The help text for the flag.
+   */
   boolean: (name: string, short: string, defaultValue: boolean, description: string) => void;
+
+  /**
+   * Defines a persistent string array flag, allowing multiple values.
+   * @param name The full name of the flag.
+   * @param short The short name of the flag. Leave empty string for no short flag.
+   * @param defaultValue The default array of strings if the flag is not provided.
+   * @param description The help text for the flag.
+   */
   stringArray: (name: string, short: string, defaultValue: string[], description: string) => void;
 }
 
@@ -352,19 +456,21 @@ export class Command {
         return;
       }
 
-      await targetCmd.runPersistentPreRun(parsed.positionals);
+      const state = new RunState();
+
+      await targetCmd.runPersistentPreRun(parsed.positionals, state);
 
       if (targetCmd.preRun !== undefined) {
-        await targetCmd.preRun(targetCmd, parsed.positionals);
+        await targetCmd.preRun(targetCmd, parsed.positionals, state);
       }
 
-      await targetCmd.run(targetCmd, parsed.positionals);
+      await targetCmd.run(targetCmd, parsed.positionals, state);
 
       if (targetCmd.postRun !== undefined) {
-        await targetCmd.postRun(targetCmd, parsed.positionals);
+        await targetCmd.postRun(targetCmd, parsed.positionals, state);
       }
 
-      await targetCmd.runPersistentPostRun(parsed.positionals);
+      await targetCmd.runPersistentPostRun(parsed.positionals, state);
     } catch (error: unknown) {
       if (!targetCmd.silenceErrors) {
         console.error(`Error: ${Command.errorMessage(error)}`);
@@ -614,12 +720,12 @@ export class Command {
     return undefined;
   }
 
-  private async runPersistentPreRun(positionals: string[]) {
-    await Command.runClosestPersistentPreRun(this, this, positionals);
+  private async runPersistentPreRun(positionals: string[], state: RunState) {
+    await Command.runClosestPersistentPreRun(this, this, positionals, state);
   }
 
-  private async runPersistentPostRun(positionals: string[]) {
-    await Command.runClosestPersistentPostRun(this, this, positionals);
+  private async runPersistentPostRun(positionals: string[], state: RunState) {
+    await Command.runClosestPersistentPostRun(this, this, positionals, state);
   }
 
   private findHelpFunc(): ((cmd: Command, args: string[]) => void) | undefined {
@@ -720,33 +826,35 @@ export class Command {
     current: Command | undefined,
     target: Command,
     positionals: string[],
+    state: RunState,
   ) {
     if (current === undefined) {
       return;
     }
 
     if (current.persistentPreRun !== undefined) {
-      await current.persistentPreRun(target, positionals);
+      await current.persistentPreRun(target, positionals, state);
       return;
     }
 
-    await Command.runClosestPersistentPreRun(current._parent, target, positionals);
+    await Command.runClosestPersistentPreRun(current._parent, target, positionals, state);
   }
 
   private static async runClosestPersistentPostRun(
     current: Command | undefined,
     target: Command,
     positionals: string[],
+    state: RunState,
   ) {
     if (current === undefined) {
       return;
     }
 
     if (current.persistentPostRun !== undefined) {
-      await current.persistentPostRun(target, positionals);
+      await current.persistentPostRun(target, positionals, state);
       return;
     }
 
-    await Command.runClosestPersistentPostRun(current._parent, target, positionals);
+    await Command.runClosestPersistentPostRun(current._parent, target, positionals, state);
   }
 }
