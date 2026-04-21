@@ -22,6 +22,7 @@ const rootCmd = new Command({
 
 const versionCmd = new Command({
   use: 'version',
+  aliases: ['ver', 'v'],
   short: 'Print the version number',
   run: () => {
     console.log('App v1.0.0');
@@ -31,6 +32,7 @@ const versionCmd = new Command({
 const echoCmd = new Command({
   use: 'echo [words...]',
   short: 'Echo back the given words',
+  aliases: ['e'],
   run: (_cmd, args) => {
     console.log(args.join(' '));
   },

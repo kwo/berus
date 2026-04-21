@@ -335,6 +335,11 @@ export class Command {
       console.log();
     }
     this.usage();
+    if (this.aliases.length > 0) {
+      console.log('Aliases:');
+      console.log(`  ${[this.name(), ...this.aliases].join(', ')}`);
+      console.log();
+    }
   }
 
   /**
@@ -464,7 +469,8 @@ export class Command {
     const print = (heading: string, cmds: Command[]) => {
       console.log(`${heading}:`);
       for (const command of cmds) {
-        console.log(`  ${command.name().padEnd(namePad)}  ${command.short}`);
+        const aliases = command.aliases.length > 0 ? ` (${command.aliases.join(', ')})` : '';
+        console.log(`  ${command.name().padEnd(namePad)}  ${command.short}${aliases}`);
       }
       console.log();
     };
