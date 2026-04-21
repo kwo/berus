@@ -4,6 +4,14 @@ const rootCmd = new Command({
   use: 'app',
   short: 'App is a fast CLI',
   long: 'A longer description of App showing how it works.',
+  flagsConfig: {
+    verbose: {
+      type: 'boolean',
+      short: 'v',
+      defaultValue: false,
+      description: 'Enable verbose output',
+    },
+  },
   run: (cmd) => {
     console.log('Running app!');
     if (cmd.flags().getBoolean('verbose')) {
@@ -11,8 +19,6 @@ const rootCmd = new Command({
     }
   },
 });
-
-rootCmd.flags().boolean('verbose', 'v', false, 'Enable verbose output');
 
 const versionCmd = new Command({
   use: 'version',

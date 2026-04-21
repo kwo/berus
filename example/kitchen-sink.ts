@@ -7,6 +7,20 @@ const rootCmd = new Command({
   long: 'MyCLI demonstrates all the advanced features of the berus library.',
   example: '  mycli server start --port 8080\n  mycli config get database.url',
   silenceErrors: true, // We will handle errors gracefully if we want, or rely on the framework
+  persistentFlagsConfig: {
+    config: {
+      type: 'string',
+      short: 'c',
+      defaultValue: 'config.json',
+      description: 'Path to config file',
+    },
+    verbose: {
+      type: 'boolean',
+      short: 'v',
+      defaultValue: false,
+      description: 'Enable verbose logging',
+    },
+  },
   persistentPreRun: () => {
     console.log('[Hook] rootCmd persistentPreRun: Setting up global context...');
   },
@@ -14,10 +28,6 @@ const rootCmd = new Command({
     console.log('[Hook] rootCmd persistentPostRun: Cleaning up global context...');
   },
 });
-
-// Global persistent flags available on all subcommands
-rootCmd.persistentFlags().string('config', 'c', 'config.json', 'Path to config file');
-rootCmd.persistentFlags().boolean('verbose', 'v', false, 'Enable verbose logging');
 
 // Group definitions for help output
 rootCmd.addGroup('server', 'Server Operations');
@@ -38,6 +48,14 @@ const serverCmd = new Command({
 const startCmd = new Command({
   use: 'start',
   short: 'Start the server',
+  flagsConfig: {
+    port: {
+      type: 'string',
+      short: 'p',
+      defaultValue: '8080',
+      description: 'Port to listen on',
+    },
+  },
   preRun: () => {
     console.log('[Hook] startCmd preRun: Preparing server resources...');
   },
@@ -47,7 +65,6 @@ const startCmd = new Command({
     console.log(`Starting server on port ${port} (verbose: ${String(verbose)})`);
   },
 });
-startCmd.flags().string('port', 'p', '8080', 'Port to listen on');
 
 // -- Server DB (Level 2) --
 const dbCmd = new Command({
@@ -68,8 +85,8 @@ const dbConfigGetCmd = new Command({
   args: ExactArgs(1),
   run: (cmd, args) => {
     const key = args[0] ?? '';
-    const configPath = cmd.getInheritedFlags().config?.defaultValue; // Access persistent flag
-    console.log(`Reading DB config key "${key}" using config file: ${String(configPath)}`);
+    const configPath = cmd.flags().getString('config'); // Access persistent flag
+    console.log(`Reading DB config key "${key}" using config file: ${configPath}`);
   },
 });
 
@@ -84,6 +101,14 @@ const adminCmd = new Command({
   short: 'Run administrative tasks',
   groupID: 'admin',
   args: MinimumNArgs(1),
+  flagsConfig: {
+    force: {
+      type: 'boolean',
+      short: 'f',
+      defaultValue: false,
+      description: 'Force the administrative action',
+    },
+  },
   run: (cmd, args) => {
     const action = args[0];
     const targetUsers = args.slice(1);
@@ -95,29 +120,25 @@ const adminCmd = new Command({
     }
   },
 });
-adminCmd.flags().boolean('force', 'f', false, 'Force the administrative action');
 
-// --- HIDDEN & DEPRECATED COMMANDS ---
+// --- EXTRA COMMANDS ---
 const legacyCmd = new Command({
   use: 'legacy-sync',
   short: 'Old sync method',
-  deprecated: 'use "admin sync" instead.',
   run: () => {
     console.log('Running legacy sync...');
   },
 });
 
-const secretDevCmd = new Command({
+const devDebugCmd = new Command({
   use: 'dev-debug',
   short: 'Internal debug tool',
-  hidden: true,
   run: () => {
     console.log('Secret developer debug info printed here.');
   },
 });
-
 // Assemble root children
-rootCmd.addCommand(serverCmd, adminCmd, legacyCmd, secretDevCmd);
+rootCmd.addCommand(serverCmd, adminCmd, legacyCmd, devDebugCmd);
 
 // --- EXECUTE ---
 // Wrapped in async IIFE since execute() is async

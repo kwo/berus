@@ -1,18 +1,31 @@
-# berus
+# @kwo1/berus
 
-A lightweight CLI framework for TypeScript heavily inspired by Go's [Cobra](https://github.com/spf13/cobra).
+A lightweight CLI framework for TypeScript inspired by Go's [Cobra](https://github.com/spf13/cobra).
 
-`berus` provides an intuitive, tree-based API for building powerful modern CLI applications in Node.js, while adapting idiomatic TypeScript/JavaScript constructs (like Promises for async execution and standard JS ecosystem tooling).
+`@kwo1/berus` provides a tree-based command API for building Node.js CLIs, with lifecycle hooks, argument validators, and declarative flags.
+
+## Install
+
+```bash
+npm install @kwo1/berus
+```
 
 ## Quick Start
 
-```typescript
-import { Command } from 'berus';
+```ts
+import { Command } from '@kwo1/berus';
 
-// 1. Create a root command
 const rootCmd = new Command({
   use: 'mycli',
   short: 'A fast and flexible CLI tool',
+  flagsConfig: {
+    verbose: {
+      type: 'boolean',
+      short: 'v',
+      defaultValue: false,
+      description: 'Enable verbose output',
+    },
+  },
   run: (cmd) => {
     if (cmd.flags().getBoolean('verbose')) {
       console.log('Running in verbose mode');
@@ -22,10 +35,6 @@ const rootCmd = new Command({
   },
 });
 
-// 2. Add flags
-rootCmd.flags().boolean('verbose', 'v', false, 'Enable verbose output');
-
-// 3. Create a subcommand
 const versionCmd = new Command({
   use: 'version',
   short: 'Print the version number',
@@ -34,66 +43,58 @@ const versionCmd = new Command({
   },
 });
 
-// 4. Attach subcommand to root
 rootCmd.addCommand(versionCmd);
 
-// 5. Execute!
 void rootCmd.execute();
 ```
 
 ## Features
 
-### Tree-based Command Routing
-Build complex applications by nesting commands. Traverse the command tree based on the provided arguments to automatically execute the correct nested subcommand.
+### Command Tree Routing
+Define parent/child commands and route execution by CLI args.
 
 ### Execution Lifecycle Hooks
-Berus shines in its execution lifecycle. You can define multiple asynchronous hooks that run before or after the main execution logic.
+Hooks run in this order:
+- `persistentPreRun`
+- `preRun`
+- `run`
+- `postRun`
+- `persistentPostRun`
 
-Available hooks (executed in this order):
-- `persistentPreRun`: Runs before `preRun` and is inherited by all child commands.
-- `preRun`: Runs before `run` for this specific command.
-- `run`: The main execution function.
-- `postRun`: Runs after `run` for this specific command.
-- `persistentPostRun`: Runs after `postRun` and is inherited by all child commands.
+### RunState (Shared Hook State)
+Use `RunState` to pass data through lifecycle hooks during one execution.
 
-### Flags & Options
-Define typed flags easily. The library parses boolean, string, and string array flags out of the box.
+### Declarative Flags
+Define flags in command config:
+- `flagsConfig` (local flags)
+- `persistentFlagsConfig` (inherited by descendants)
 
-- **Local Flags**: Available only to the command they are defined on.
-- **Persistent Flags**: Defined on a parent command but inherited and usable by all child subcommands.
-- **Hidden Flags**: Flags that remain functional but are omitted from the auto-generated help output.
-- **Required Flags**: Mark a flag as required to have the framework automatically enforce its presence.
+Supported flag types:
+- `string`
+- `boolean`
+- `integer`
+- `booleanCount` (e.g. `-vvv` style verbosity)
+
+### Required Flags
+Set `required: true` in flag config to enforce presence before command run.
 
 ### Argument Validation
-Validate positional arguments before command execution.
-Available validators:
-- `NoArgs()`: Ensure no positional arguments are passed.
-- `ExactArgs(n)`: Require exactly `n` positional arguments.
-- `MinimumNArgs(n)`: Require at least `n` positional arguments.
-- `MaximumNArgs(n)`: Accept at most `n` positional arguments.
+Built-in validators:
+- `NoArgs()`
+- `ExactArgs(n)`
+- `MinimumNArgs(n)`
+- `MaximumNArgs(n)`
 
-### Help & Usage Generation
-`berus` automatically generates detailed `--help` output based on your command tree.
+### Help & Usage Output
+`berus` auto-generates usage/help output from command metadata (`use`, `short`, `long`, `example`) and command tree structure.
 
-- `use`, `short`, `long`, and `example` strings enrich the help text.
-- Customize the output by overriding `.setHelpFunc()` and `.setUsageFunc()`.
+### Command Groups & Aliases
+- Organize help output with `addGroup()` + `groupID`
+- Add alternate command names with `aliases`
 
-### Command Groups & UX Features
-For larger applications with many subcommands, organize them into visual groups in the help output using `addGroup()` and the `groupID` property.
+## Development
 
-You can also:
-- Define `aliases` to provide alternative names for commands.
-- Hide commands using the `hidden` property.
-- Mark commands as `deprecated`, which automatically prints a warning before execution.
-- Suppress automatic error logging and usage printing with `silenceErrors` and `silenceUsage`.
-
-## Development & Testing
-
-This project uses modern Node.js features and tools:
-- **TypeScript** via `tsc` for emitting ESM.
-- **Testing** via the Node.js built-in test runner (`node:test`).
-
-To run the tests:
 ```bash
 npm run test
+npm run build
 ```

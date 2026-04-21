@@ -1,7 +1,10 @@
 {
-  "name": "beruscli",
-  "version": "0.1.2",
+  "name": "@kwo1/berus",
+  "version": "0.0.1",
   "description": "A lightweight CLI framework for TypeScript heavily inspired by Go's Cobra",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

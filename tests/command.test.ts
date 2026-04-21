@@ -75,23 +75,4 @@ describe('Command', () => {
       'root_persistentPostRun',
     ]);
   });
-
-  it('supports custom help and usage funcs', async () => {
-    const helpMock = mock.fn();
-    const usageMock = mock.fn();
-
-    const root = new Command({ use: 'root' });
-    root.setHelpFunc(helpMock);
-    root.setUsageFunc(usageMock);
-
-    const sub = new Command({ use: 'sub' });
-    root.addCommand(sub);
-
-    await root.execute(['--help']);
-    await root.execute(['sub', '--help']);
-    sub.usage();
-
-    assert.equal(helpMock.mock.callCount(), 2);
-    assert.equal(usageMock.mock.callCount(), 1);
-  });
 });

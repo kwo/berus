@@ -34,9 +34,9 @@ export class RunState {
 
 export type RunFunc = (cmd: Command, args: string[], state: RunState) => void | Promise<void>;
 export type ArgsFunc = (cmd: Command, args: string[]) => Error | undefined;
-type FlagType = 'string' | 'boolean' | 'stringArray';
-type FlagDefault = string | boolean | string[];
-type FlagValue = string | boolean | string[];
+type FlagType = 'string' | 'boolean' | 'integer' | 'booleanCount';
+type FlagDefault = string | boolean | number;
+type FlagValue = string | boolean | number;
 
 interface FlagDef {
   type: FlagType;
@@ -45,7 +45,6 @@ interface FlagDef {
   description?: string;
   persistent?: boolean;
   required?: boolean;
-  hidden?: boolean;
 }
 
 interface CommandGroup {
@@ -54,37 +53,9 @@ interface CommandGroup {
 }
 
 /**
- * Interface for defining and retrieving local flags on a command.
- * Local flags apply only to the specific command they are defined on.
+ * Read-only interface for retrieving parsed flag values on a command.
  */
 interface FlagAccessor {
-  /**
-   * Defines a local string flag.
-   * @param name The full name of the flag (e.g., 'file').
-   * @param short The short name of the flag (e.g., 'f'). Leave empty string for no short flag.
-   * @param defaultValue The default value if the flag is not provided.
-   * @param description The help text for the flag.
-   */
-  string: (name: string, short: string, defaultValue: string, description: string) => void;
-
-  /**
-   * Defines a local boolean flag.
-   * @param name The full name of the flag.
-   * @param short The short name of the flag. Leave empty string for no short flag.
-   * @param defaultValue The default value if the flag is not provided.
-   * @param description The help text for the flag.
-   */
-  boolean: (name: string, short: string, defaultValue: boolean, description: string) => void;
-
-  /**
-   * Defines a local string array flag, allowing multiple values.
-   * @param name The full name of the flag.
-   * @param short The short name of the flag. Leave empty string for no short flag.
-   * @param defaultValue The default array of strings if the flag is not provided.
-   * @param description The help text for the flag.
-   */
-  stringArray: (name: string, short: string, defaultValue: string[], description: string) => void;
-
   /**
    * Retrieves the parsed value of a string flag.
    * @param name The full name of the flag.
@@ -100,50 +71,32 @@ interface FlagAccessor {
   getBoolean: (name: string) => boolean;
 
   /**
-   * Retrieves the parsed value of a string array flag.
+   * Retrieves the parsed count of a boolean flag.
    * @param name The full name of the flag.
-   * @returns The parsed array of strings, or the default value, or an empty array.
+   * @returns The number of times the flag was provided, or the default value, or 0.
    */
-  getStringArray: (name: string) => string[];
-}
-
-/**
- * Interface for defining persistent flags on a command.
- * Persistent flags are inherited by all child commands recursively.
- */
-interface PersistentFlagAccessor {
-  /**
-   * Defines a persistent string flag.
-   * @param name The full name of the flag.
-   * @param short The short name of the flag. Leave empty string for no short flag.
-   * @param defaultValue The default value if the flag is not provided.
-   * @param description The help text for the flag.
-   */
-  string: (name: string, short: string, defaultValue: string, description: string) => void;
+  getBooleanCount: (name: string) => number;
 
   /**
-   * Defines a persistent boolean flag.
+   * Retrieves the parsed value of an integer flag.
    * @param name The full name of the flag.
-   * @param short The short name of the flag. Leave empty string for no short flag.
-   * @param defaultValue The default value if the flag is not provided.
-   * @param description The help text for the flag.
+   * @returns The parsed integer value, or the default value, or 0.
    */
-  boolean: (name: string, short: string, defaultValue: boolean, description: string) => void;
-
-  /**
-   * Defines a persistent string array flag, allowing multiple values.
-   * @param name The full name of the flag.
-   * @param short The short name of the flag. Leave empty string for no short flag.
-   * @param defaultValue The default array of strings if the flag is not provided.
-   * @param description The help text for the flag.
-   */
-  stringArray: (name: string, short: string, defaultValue: string[], description: string) => void;
+  getInteger: (name: string) => number;
 }
 
 interface ParseOption {
   type: 'string' | 'boolean';
   short?: string;
   multiple?: boolean;
+}
+
+export interface FlagConfig {
+  type: FlagType;
+  short?: string;
+  defaultValue?: FlagDefault;
+  description?: string;
+  required?: boolean;
 }
 
 export class Command {
@@ -179,17 +132,6 @@ export class Command {
    * Used to organize commands in the parent's help output.
    */
   groupID = '';
-
-  /**
-   * If true, this command will not be shown in the help output.
-   */
-  hidden = false;
-
-  /**
-   * If set to a string, using this command will print a deprecation warning
-   * with the provided string as the message.
-   */
-  deprecated = '';
 
   /**
    * If true, errors will not be printed automatically when execution fails.
@@ -236,16 +178,54 @@ export class Command {
    */
   persistentPostRun?: RunFunc;
 
+  /**
+   * Declarative flags available on this specific command.
+   */
+  flagsConfig?: Record<string, FlagConfig>;
+
+  /**
+   * Declarative flags inherited by this command and all of its subcommands.
+   */
+  persistentFlagsConfig?: Record<string, FlagConfig>;
+
   private _parent?: Command;
   private _commands: Command[] = [];
   private _groups: CommandGroup[] = [];
   private _flags: Record<string, FlagDef> = {};
   private _flagValues: Record<string, FlagValue> = {};
-  private _helpFunc?: (cmd: Command, args: string[]) => void;
-  private _usageFunc?: (cmd: Command) => void;
 
   constructor(config?: Partial<Command>) {
     Object.assign(this, config);
+
+    if (this.flagsConfig) {
+      for (const [name, flagDef] of Object.entries(this.flagsConfig)) {
+        this._flags[name] = Command.createFlagDef(
+          flagDef.type,
+          flagDef.short,
+          flagDef.defaultValue,
+          flagDef.description,
+          false,
+        );
+        if (flagDef.required) {
+          this._flags[name].required = true;
+        }
+      }
+    }
+
+    if (this.persistentFlagsConfig) {
+      for (const [name, flagDef] of Object.entries(this.persistentFlagsConfig)) {
+        this._flags[name] = Command.createFlagDef(
+          flagDef.type,
+          flagDef.short,
+          flagDef.defaultValue,
+          flagDef.description,
+          true,
+        );
+        if (flagDef.required) {
+          this._flags[name].required = true;
+        }
+      }
+    }
   }
 
   /**
@@ -274,38 +254,10 @@ export class Command {
   }
 
   /**
-   * Returns a flag accessor used to define and retrieve local flags.
-   * Local flags are only available on this specific command.
+   * Returns a flag accessor used to retrieve parsed flags.
    */
   flags(): FlagAccessor {
     return {
-      string: (name: string, short: string, defaultValue: string, description: string) => {
-        this._flags[name] = Command.createFlagDef(
-          'string',
-          short,
-          defaultValue,
-          description,
-          false,
-        );
-      },
-      boolean: (name: string, short: string, defaultValue: boolean, description: string) => {
-        this._flags[name] = Command.createFlagDef(
-          'boolean',
-          short,
-          defaultValue,
-          description,
-          false,
-        );
-      },
-      stringArray: (name: string, short: string, defaultValue: string[], description: string) => {
-        this._flags[name] = Command.createFlagDef(
-          'stringArray',
-          short,
-          defaultValue,
-          description,
-          false,
-        );
-      },
       getString: (name: string): string => {
         const value = this._flagValues[name] ?? this._flags[name]?.defaultValue;
         return typeof value === 'string' ? value : '';
@@ -314,69 +266,15 @@ export class Command {
         const value = this._flagValues[name] ?? this._flags[name]?.defaultValue;
         return typeof value === 'boolean' ? value : false;
       },
-      getStringArray: (name: string): string[] => {
+      getBooleanCount: (name: string): number => {
         const value = this._flagValues[name] ?? this._flags[name]?.defaultValue;
-        return Array.isArray(value)
-          ? value.filter((item): item is string => typeof item === 'string')
-          : [];
+        return typeof value === 'number' ? value : 0;
+      },
+      getInteger: (name: string): number => {
+        const value = this._flagValues[name] ?? this._flags[name]?.defaultValue;
+        return typeof value === 'number' ? value : 0;
       },
     };
-  }
-
-  /**
-   * Returns a flag accessor used to define persistent flags.
-   * Persistent flags are available on this command and all of its subcommands.
-   */
-  persistentFlags(): PersistentFlagAccessor {
-    return {
-      string: (name: string, short: string, defaultValue: string, description: string) => {
-        this._flags[name] = Command.createFlagDef('string', short, defaultValue, description, true);
-      },
-      boolean: (name: string, short: string, defaultValue: boolean, description: string) => {
-        this._flags[name] = Command.createFlagDef(
-          'boolean',
-          short,
-          defaultValue,
-          description,
-          true,
-        );
-      },
-      stringArray: (name: string, short: string, defaultValue: string[], description: string) => {
-        this._flags[name] = Command.createFlagDef(
-          'stringArray',
-          short,
-          defaultValue,
-          description,
-          true,
-        );
-      },
-    };
-  }
-
-  /**
-   * Marks a previously defined flag as required.
-   * If the user fails to provide this flag, execution will halt with an error.
-   *
-   * @param name The name of the flag to mark as required.
-   */
-  markFlagRequired(name: string) {
-    const flag = this._flags[name];
-    if (flag !== undefined) {
-      flag.required = true;
-    }
-  }
-
-  /**
-   * Marks a previously defined flag as hidden.
-   * The flag will still function if provided, but it will not appear in the help output.
-   *
-   * @param name The name of the flag to hide.
-   */
-  markFlagHidden(name: string) {
-    const flag = this._flags[name];
-    if (flag !== undefined) {
-      flag.hidden = true;
-    }
   }
 
   /**
@@ -432,10 +330,6 @@ export class Command {
       if (targetCmd._flagValues.help === true) {
         targetCmd.help(remainingArgs);
         return;
-      }
-
-      if (targetCmd.deprecated !== '') {
-        console.warn(`Command "${targetCmd.name()}" is deprecated, ${targetCmd.deprecated}`);
       }
 
       for (const [key, def] of Object.entries(activeFlags)) {
@@ -548,30 +442,11 @@ export class Command {
   }
 
   /**
-   * Overrides the default help function for this command and its children.
-   */
-  setHelpFunc(func: (cmd: Command, args: string[]) => void) {
-    this._helpFunc = func;
-  }
-
-  /**
-   * Overrides the default usage function for this command and its children.
-   */
-  setUsageFunc(func: (cmd: Command) => void) {
-    this._usageFunc = func;
-  }
-
-  /**
    * Generates and prints the help output for this command.
    * Automatically invoked when the `--help` flag is provided or no `run` function exists.
    */
   help(args: string[] = []) {
-    const helpFunc = this.findHelpFunc();
-    if (helpFunc !== undefined) {
-      helpFunc(this, args);
-      return;
-    }
-
+    void args;
     console.log();
 
     const description = this.long !== '' ? this.long : this.short;
@@ -588,12 +463,6 @@ export class Command {
    * Called automatically by `help()` or when a command fails (unless `silenceUsage` is true).
    */
   usage() {
-    const usageFunc = this.findUsageFunc();
-    if (usageFunc !== undefined) {
-      usageFunc(this);
-      return;
-    }
-
     console.log('Usage:');
     if (this._commands.length > 0) {
       console.log(`  ${this.use} [command]`);
@@ -602,15 +471,13 @@ export class Command {
     }
     console.log();
 
-    const visibleCommands = this._commands.filter((command) => !command.hidden);
+    const visibleCommands = this._commands;
     if (visibleCommands.length > 0) {
       this.printCommandGroups(visibleCommands);
     }
 
     const activeFlags = this.getInheritedFlags();
-    const visibleFlagKeys = Object.keys(activeFlags).filter(
-      (key) => activeFlags[key]?.hidden !== true,
-    );
+    const visibleFlagKeys = Object.keys(activeFlags);
 
     if (visibleFlagKeys.length > 0) {
       console.log('Flags:');
@@ -635,18 +502,24 @@ export class Command {
 
   private static createFlagDef(
     type: FlagType,
-    short: string,
-    defaultValue: FlagDefault,
-    description: string,
+    short: string | undefined,
+    defaultValue: FlagDefault | undefined,
+    description: string | undefined,
     persistent: boolean,
   ): FlagDef {
     const flag: FlagDef = {
       type,
-      defaultValue,
-      description,
     };
 
-    if (short !== '') {
+    if (defaultValue !== undefined) {
+      flag.defaultValue = defaultValue;
+    }
+
+    if (description !== undefined) {
+      flag.description = description;
+    }
+
+    if (short !== undefined && short !== '') {
       flag.short = short;
     }
 
@@ -661,15 +534,18 @@ export class Command {
     const parseOptions: Record<string, ParseOption> = {};
 
     for (const [key, flag] of Object.entries(flags)) {
+      const isBoolean = flag.type === 'boolean' || flag.type === 'booleanCount';
+      const isMultiple = flag.type === 'booleanCount';
+
       const option: ParseOption = {
-        type: flag.type === 'stringArray' ? 'string' : flag.type,
+        type: isBoolean ? 'boolean' : 'string',
       };
 
       if (flag.short !== undefined) {
         option.short = flag.short;
       }
 
-      if (flag.type === 'stringArray') {
+      if (isMultiple) {
         option.multiple = true;
       }
 
@@ -691,7 +567,7 @@ export class Command {
         continue;
       }
 
-      const parsedValue = Command.parseFlagValue(flag, rawValue);
+      const parsedValue = Command.parseFlagValue(key, flag, rawValue);
       if (parsedValue !== undefined) {
         normalized[key] = parsedValue;
       }
@@ -700,9 +576,26 @@ export class Command {
     return normalized;
   }
 
-  private static parseFlagValue(flag: FlagDef, rawValue: unknown): FlagValue | undefined {
+  private static parseFlagValue(
+    flagName: string,
+    flag: FlagDef,
+    rawValue: unknown,
+  ): FlagValue | undefined {
     if (flag.type === 'string') {
       return typeof rawValue === 'string' ? rawValue : undefined;
+    }
+
+    if (flag.type === 'integer') {
+      if (typeof rawValue !== 'string') {
+        return undefined;
+      }
+
+      const parsed = Command.parseInteger(rawValue);
+      if (parsed === undefined) {
+        throw new Error(`invalid integer value "${rawValue}" for flag "${flagName}"`);
+      }
+
+      return parsed;
     }
 
     if (flag.type === 'boolean') {
@@ -710,14 +603,27 @@ export class Command {
     }
 
     if (Array.isArray(rawValue)) {
-      return rawValue.filter((entry): entry is string => typeof entry === 'string');
+      if (flag.type === 'booleanCount') {
+        return rawValue.filter((entry): entry is boolean => typeof entry === 'boolean' && entry)
+          .length;
+      }
     }
 
-    if (typeof rawValue === 'string') {
-      return [rawValue];
+    if (typeof rawValue === 'boolean' && flag.type === 'booleanCount') {
+      return rawValue ? 1 : 0;
     }
 
     return undefined;
+  }
+
+  private static parseInteger(rawValue: string): number | undefined {
+    const trimmed = rawValue.trim();
+    if (!/^[+-]?\d+$/.test(trimmed)) {
+      return undefined;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isSafeInteger(parsed) ? parsed : undefined;
   }
 
   private async runPersistentPreRun(positionals: string[], state: RunState) {
@@ -726,38 +632,6 @@ export class Command {
 
   private async runPersistentPostRun(positionals: string[], state: RunState) {
     await Command.runClosestPersistentPostRun(this, this, positionals, state);
-  }
-
-  private findHelpFunc(): ((cmd: Command, args: string[]) => void) | undefined {
-    if (this._helpFunc !== undefined) {
-      return this._helpFunc;
-    }
-
-    let current = this._parent;
-    while (current !== undefined) {
-      if (current._helpFunc !== undefined) {
-        return current._helpFunc;
-      }
-      current = current._parent;
-    }
-
-    return undefined;
-  }
-
-  private findUsageFunc(): ((cmd: Command) => void) | undefined {
-    if (this._usageFunc !== undefined) {
-      return this._usageFunc;
-    }
-
-    let current = this._parent;
-    while (current !== undefined) {
-      if (current._usageFunc !== undefined) {
-        return current._usageFunc;
-      }
-      current = current._parent;
-    }
-
-    return undefined;
   }
 
   private printCommandGroups(visibleCommands: Command[]) {
@@ -804,10 +678,6 @@ export class Command {
 
   private static formatDefaultSuffix(defaultValue: FlagDefault | undefined): string {
     if (defaultValue === undefined || defaultValue === '' || defaultValue === false) {
-      return '';
-    }
-
-    if (Array.isArray(defaultValue) && defaultValue.length === 0) {
       return '';
     }
 

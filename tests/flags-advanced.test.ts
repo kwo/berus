@@ -8,31 +8,78 @@ describe('Flags (Advanced)', () => {
   });
 
   it('supports persistent flags', async () => {
-    const root = new Command({ use: 'root' });
-    root.persistentFlags().string('config', 'c', '', 'config file');
+    const root = new Command({
+      use: 'root',
+      persistentFlagsConfig: {
+        config: { type: 'string', short: 'c', defaultValue: '', description: 'config file' },
+      },
+    });
 
+    let capturedConfig = '';
     const subMock = mock.fn();
-    const sub = new Command({ use: 'sub', run: subMock });
+    const sub = new Command({
+      use: 'sub',
+      run: (cmd) => {
+        subMock();
+        capturedConfig = cmd.flags().getString('config');
+      },
+    });
     root.addCommand(sub);
 
     await root.execute(['sub', '--config', 'test.json']);
 
     assert.equal(subMock.mock.callCount(), 1);
-    assert.equal(sub.flags().getString('config'), 'test.json');
+    assert.equal(capturedConfig, 'test.json');
   });
 
-  it('supports string array flags', async () => {
-    const root = new Command({ use: 'root' });
-    root.flags().stringArray('file', 'f', [], 'files to process');
+  it('supports boolean count flags', async () => {
+    let verbosityCount = 0;
+    const root = new Command({
+      use: 'root',
+      flagsConfig: {
+        verbose: { type: 'booleanCount', short: 'v', defaultValue: 0 },
+      },
+      run: (cmd) => {
+        verbosityCount = cmd.flags().getBooleanCount('verbose');
+      },
+    });
 
-    await root.execute(['--file', 'a.txt', '-f', 'b.txt']);
-    assert.deepEqual(root.flags().getStringArray('file'), ['a.txt', 'b.txt']);
+    await root.execute(['-v', '-v', '--verbose']);
+    assert.equal(verbosityCount, 3);
+  });
+
+  it('rejects invalid integer values', async () => {
+    const root = new Command({
+      use: 'root',
+      silenceUsage: true,
+      flagsConfig: {
+        count: { type: 'integer', defaultValue: 0, description: 'count' },
+      },
+      run: () => undefined,
+    });
+
+    const errSpy = mock.method(console, 'error', () => undefined);
+
+    try {
+      await root.execute(['--count', '12abc']);
+      assert.equal(
+        errSpy.mock.calls[0]?.arguments[0],
+        'Error: invalid integer value "12abc" for flag "count"',
+      );
+    } finally {
+      errSpy.mock.restore();
+    }
   });
 
   it('enforces required flags', async () => {
-    const root = new Command({ use: 'root', silenceUsage: true });
-    root.flags().string('name', 'n', '', 'name');
-    root.markFlagRequired('name');
+    const root = new Command({
+      use: 'root',
+      silenceUsage: true,
+      flagsConfig: {
+        name: { type: 'string', short: 'n', defaultValue: '', description: 'name', required: true },
+      },
+      run: () => undefined,
+    });
 
     const errSpy = mock.method(console, 'error', () => undefined);
 
@@ -45,22 +92,6 @@ describe('Flags (Advanced)', () => {
       assert.equal(errSpy.mock.callCount(), 0);
     } finally {
       errSpy.mock.restore();
-    }
-  });
-
-  it('hides hidden flags from help', () => {
-    const root = new Command({ use: 'root' });
-    root.flags().boolean('secret', '', false, 'shh');
-    root.markFlagHidden('secret');
-
-    const logSpy = mock.method(console, 'log', () => undefined);
-
-    try {
-      root.help();
-      const logs = logSpy.mock.calls.map((call) => String(call.arguments[0])).join('\n');
-      assert.equal(logs.includes('--secret'), false);
-    } finally {
-      logSpy.mock.restore();
     }
   });
 });

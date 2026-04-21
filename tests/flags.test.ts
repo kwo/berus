@@ -8,15 +8,30 @@ describe('Flags Edge Cases', () => {
   });
 
   it('local flag shadows parent persistent flag', async () => {
-    const root = new Command({ use: 'root' });
-    root.persistentFlags().string('config', 'c', 'root.json', 'Root config');
+    const root = new Command({
+      use: 'root',
+      persistentFlagsConfig: {
+        config: {
+          type: 'string',
+          short: 'c',
+          defaultValue: 'root.json',
+          description: 'Root config',
+        },
+      },
+    });
 
     const child = new Command({
       use: 'child',
+      flagsConfig: {
+        config: {
+          type: 'string',
+          short: 'c',
+          defaultValue: 'child.json',
+          description: 'Child config',
+        },
+      },
       run: mock.fn(),
     });
-    // Child defines the same flag name, but different default/description
-    child.flags().string('config', 'c', 'child.json', 'Child config');
     root.addCommand(child);
 
     // Call child without flag -> should get child default
@@ -31,8 +46,13 @@ describe('Flags Edge Cases', () => {
   it('sibling commands do not inherit each others flags', async () => {
     const root = new Command({ use: 'root' });
 
-    const child1 = new Command({ use: 'child1', run: mock.fn() });
-    child1.persistentFlags().string('shared', '', 'val1', 'Shared flag');
+    const child1 = new Command({
+      use: 'child1',
+      persistentFlagsConfig: {
+        shared: { type: 'string', defaultValue: 'val1', description: 'Shared flag' },
+      },
+      run: mock.fn(),
+    });
 
     const child2 = new Command({ use: 'child2', run: mock.fn() });
 
@@ -56,10 +76,13 @@ describe('Flags Edge Cases', () => {
 
   it('required flag on child fails execution if missing', async () => {
     const root = new Command({ use: 'root', silenceUsage: true });
-    const child = new Command({ use: 'child', run: mock.fn() });
-
-    child.flags().string('name', 'n', '', 'Name');
-    child.markFlagRequired('name');
+    const child = new Command({
+      use: 'child',
+      flagsConfig: {
+        name: { type: 'string', short: 'n', defaultValue: '', description: 'Name', required: true },
+      },
+      run: mock.fn(),
+    });
 
     root.addCommand(child);
 
