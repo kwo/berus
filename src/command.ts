@@ -35,16 +35,18 @@ export class RunState {
 export type RunFunc = (cmd: Command, args: string[], state: RunState) => void | Promise<void>;
 export type ArgsFunc = (cmd: Command, args: string[]) => Error | undefined;
 type FlagType = 'string' | 'boolean' | 'integer' | 'booleanCount';
-type FlagDefault = string | boolean | number;
 type FlagValue = string | boolean | number;
 
-interface FlagDef {
+export interface FlagConfig {
   type: FlagType;
   short?: string;
-  defaultValue?: FlagDefault;
+  defaultValue?: FlagValue;
   description?: string;
-  persistent?: boolean;
   required?: boolean;
+}
+
+interface FlagDef extends FlagConfig {
+  persistent?: boolean;
 }
 
 interface CommandGroup {
@@ -56,136 +58,67 @@ interface CommandGroup {
  * Read-only interface for retrieving parsed flag values on a command.
  */
 interface FlagAccessor {
-  /**
-   * Retrieves the parsed value of a string flag.
-   * @param name The full name of the flag.
-   * @returns The parsed string value, or the default value, or an empty string.
-   */
+  /** Retrieves the parsed value of a string flag. */
   getString: (name: string) => string;
-
-  /**
-   * Retrieves the parsed value of a boolean flag.
-   * @param name The full name of the flag.
-   * @returns The parsed boolean value, or the default value, or false.
-   */
+  /** Retrieves the parsed value of a boolean flag. */
   getBoolean: (name: string) => boolean;
-
-  /**
-   * Retrieves the parsed count of a boolean flag.
-   * @param name The full name of the flag.
-   * @returns The number of times the flag was provided, or the default value, or 0.
-   */
+  /** Retrieves the parsed count of a boolean flag. */
   getBooleanCount: (name: string) => number;
-
-  /**
-   * Retrieves the parsed value of an integer flag.
-   * @param name The full name of the flag.
-   * @returns The parsed integer value, or the default value, or 0.
-   */
+  /** Retrieves the parsed value of an integer flag. */
   getInteger: (name: string) => number;
 }
 
-interface ParseOption {
-  type: 'string' | 'boolean';
+export interface CommandConfig {
+  use?: string;
   short?: string;
-  multiple?: boolean;
-}
-
-export interface FlagConfig {
-  type: FlagType;
-  short?: string;
-  defaultValue?: FlagDefault;
-  description?: string;
-  required?: boolean;
+  long?: string;
+  example?: string;
+  aliases?: string[];
+  groupID?: string;
+  silenceErrors?: boolean;
+  silenceUsage?: boolean;
+  args?: ArgsFunc;
+  run?: RunFunc;
+  persistentPreRun?: RunFunc;
+  preRun?: RunFunc;
+  postRun?: RunFunc;
+  persistentPostRun?: RunFunc;
+  flagsConfig?: Record<string, FlagConfig>;
+  persistentFlagsConfig?: Record<string, FlagConfig>;
 }
 
 export class Command {
-  /**
-   * The one-line usage message.
-   * Typically starts with the command name, followed by expected arguments.
-   * Example: "echo [words...]"
-   */
+  /** The one-line usage message (e.g. "echo [words...]"). */
   use = '';
-
-  /**
-   * A short description shown in the 'help' output of the parent command.
-   */
+  /** A short description shown in the parent command's help output. */
   short = '';
-
-  /**
-   * A long description shown in the specific 'help' output for this command.
-   */
+  /** A long description shown in this command's help output. */
   long = '';
-
-  /**
-   * Example usage string, shown in the specific 'help' output.
-   */
+  /** Example usage string, shown in this command's help output. */
   example = '';
-
-  /**
-   * Alternative names that can be used to invoke this command.
-   */
+  /** Alternative names that can be used to invoke this command. */
   aliases: string[] = [];
-
-  /**
-   * The ID of the group this command belongs to.
-   * Used to organize commands in the parent's help output.
-   */
+  /** The ID of the group this command belongs to (for help organization). */
   groupID = '';
-
-  /**
-   * If true, errors will not be printed automatically when execution fails.
-   */
+  /** If true, errors are not printed automatically when execution fails. */
   silenceErrors = false;
-
-  /**
-   * If true, the usage message will not be printed automatically when an error occurs.
-   */
+  /** If true, usage is not printed automatically when an error occurs. */
   silenceUsage = false;
-
-  /**
-   * Function used to validate the positional arguments.
-   * Example: `ExactArgs(2)`
-   */
+  /** Positional argument validator (e.g. `ExactArgs(2)`). */
   args?: ArgsFunc;
-
-  /**
-   * The primary execution function for the command.
-   */
+  /** Primary execution function. */
   run?: RunFunc;
-
-  /**
-   * A pre-run execution function that is inherited by all child commands.
-   * It runs before `preRun` and `run`.
-   */
+  /** Pre-run hook inherited by descendants. Runs before `preRun` and `run`. */
   persistentPreRun?: RunFunc;
-
-  /**
-   * A pre-run execution function for this specific command.
-   * It runs after `persistentPreRun` but before `run`.
-   */
+  /** Pre-run hook for this command. Runs after `persistentPreRun`, before `run`. */
   preRun?: RunFunc;
-
-  /**
-   * A post-run execution function for this specific command.
-   * It runs after `run`.
-   */
+  /** Post-run hook for this command. Runs after `run`. */
   postRun?: RunFunc;
-
-  /**
-   * A post-run execution function that is inherited by all child commands.
-   * It runs after `postRun`.
-   */
+  /** Post-run hook inherited by descendants. Runs after `postRun`. */
   persistentPostRun?: RunFunc;
-
-  /**
-   * Declarative flags available on this specific command.
-   */
+  /** Declarative flags local to this command. */
   flagsConfig?: Record<string, FlagConfig>;
-
-  /**
-   * Declarative flags inherited by this command and all of its subcommands.
-   */
+  /** Declarative flags inherited by this command and its subcommands. */
   persistentFlagsConfig?: Record<string, FlagConfig>;
 
   private _parent?: Command;
@@ -194,46 +127,20 @@ export class Command {
   private _flags: Record<string, FlagDef> = {};
   private _flagValues: Record<string, FlagValue> = {};
 
-  constructor(config?: Partial<Command>) {
+  constructor(config?: CommandConfig) {
     Object.assign(this, config);
 
-    if (this.flagsConfig) {
-      for (const [name, flagDef] of Object.entries(this.flagsConfig)) {
-        this._flags[name] = Command.createFlagDef(
-          flagDef.type,
-          flagDef.short,
-          flagDef.defaultValue,
-          flagDef.description,
-          false,
-        );
-        if (flagDef.required) {
-          this._flags[name].required = true;
-        }
-      }
+    for (const [name, def] of Object.entries(this.flagsConfig ?? {})) {
+      this._flags[name] = { ...def };
     }
-
-    if (this.persistentFlagsConfig) {
-      for (const [name, flagDef] of Object.entries(this.persistentFlagsConfig)) {
-        this._flags[name] = Command.createFlagDef(
-          flagDef.type,
-          flagDef.short,
-          flagDef.defaultValue,
-          flagDef.description,
-          true,
-        );
-        if (flagDef.required) {
-          this._flags[name].required = true;
-        }
-      }
+    for (const [name, def] of Object.entries(this.persistentFlagsConfig ?? {})) {
+      this._flags[name] = { ...def, persistent: true };
     }
   }
 
   /**
-   * Adds one or more child commands to this command.
-   * establishing the parent-child relationship necessary for routing
-   * and persistent flag inheritance.
-   *
-   * @param cmds One or more Command instances to add as subcommands.
+   * Adds one or more child commands, establishing the parent-child relationship
+   * necessary for routing and persistent flag inheritance.
    */
   addCommand(...cmds: Command[]) {
     for (const cmd of cmds) {
@@ -245,34 +152,31 @@ export class Command {
   /**
    * Defines a new command group. Subcommands can reference this groupID
    * to be organized under this title in the help output.
-   *
-   * @param id The unique identifier for the group.
-   * @param title The display title shown in the help output.
    */
   addGroup(id: string, title: string) {
     this._groups.push({ id, title });
   }
 
-  /**
-   * Returns a flag accessor used to retrieve parsed flags.
-   */
+  /** Returns a flag accessor used to retrieve parsed flag values. */
   flags(): FlagAccessor {
+    const read = (name: string): FlagValue | undefined =>
+      this._flagValues[name] ?? this._flags[name]?.defaultValue;
     return {
-      getString: (name: string): string => {
-        const value = this._flagValues[name] ?? this._flags[name]?.defaultValue;
-        return typeof value === 'string' ? value : '';
+      getString: (name) => {
+        const v = read(name);
+        return typeof v === 'string' ? v : '';
       },
-      getBoolean: (name: string): boolean => {
-        const value = this._flagValues[name] ?? this._flags[name]?.defaultValue;
-        return typeof value === 'boolean' ? value : false;
+      getBoolean: (name) => {
+        const v = read(name);
+        return typeof v === 'boolean' ? v : false;
       },
-      getBooleanCount: (name: string): number => {
-        const value = this._flagValues[name] ?? this._flags[name]?.defaultValue;
-        return typeof value === 'number' ? value : 0;
+      getBooleanCount: (name) => {
+        const v = read(name);
+        return typeof v === 'number' ? v : 0;
       },
-      getInteger: (name: string): number => {
-        const value = this._flagValues[name] ?? this._flags[name]?.defaultValue;
-        return typeof value === 'number' ? value : 0;
+      getInteger: (name) => {
+        const v = read(name);
+        return typeof v === 'number' ? v : 0;
       },
     };
   }
@@ -284,31 +188,25 @@ export class Command {
    */
   getInheritedFlags(): Record<string, FlagDef> {
     const flags: Record<string, FlagDef> = { ...this._flags };
-    let current = this._parent;
-
-    while (current !== undefined) {
+    for (let current = this._parent; current !== undefined; current = current._parent) {
       for (const [key, def] of Object.entries(current._flags)) {
         if (def.persistent === true && flags[key] === undefined) {
           flags[key] = def;
         }
       }
-      current = current._parent;
     }
-
     return flags;
   }
 
   /**
-   * The primary entry point for executing the CLI.
-   * It handles routing the arguments to the correct subcommand, parsing flags,
-   * validating arguments, and running the command lifecycle hooks.
-   *
-   * @param args The raw command line arguments. Defaults to `process.argv.slice(2)`.
+   * Primary entry point for executing the CLI. Routes arguments to the target
+   * subcommand, parses flags, validates arguments, and runs lifecycle hooks.
    */
   async execute(args: string[] = process.argv.slice(2)) {
     const [targetCmd, remainingArgs] = this.findTarget(args);
-    const activeFlags = targetCmd.getInheritedFlags();
-
+    const activeFlags: Record<string, FlagDef> = {
+      ...targetCmd.getInheritedFlags(),
+    };
     activeFlags.help ??= {
       type: 'boolean',
       short: 'h',
@@ -316,10 +214,9 @@ export class Command {
     };
 
     try {
-      const parseOptions = Command.buildParseOptions(activeFlags);
       const parsed = parseArgs({
         args: remainingArgs,
-        options: parseOptions as ParseArgsOptionsConfig,
+        options: Command.buildParseOptions(activeFlags),
         strict: true,
         allowPositionals: true,
       });
@@ -328,7 +225,7 @@ export class Command {
       targetCmd._flagValues = Command.normalizeParsedValues(activeFlags, rawValues);
 
       if (targetCmd._flagValues.help === true) {
-        targetCmd.help(remainingArgs);
+        targetCmd.help();
         return;
       }
 
@@ -346,13 +243,16 @@ export class Command {
       }
 
       if (targetCmd.run === undefined) {
-        targetCmd.help(remainingArgs);
+        targetCmd.help();
         return;
       }
 
       const state = new RunState();
 
-      await targetCmd.runPersistentPreRun(parsed.positionals, state);
+      const persistentPreRun = Command.findInheritedHook(targetCmd, 'persistentPreRun');
+      if (persistentPreRun !== undefined) {
+        await persistentPreRun(targetCmd, parsed.positionals, state);
+      }
 
       if (targetCmd.preRun !== undefined) {
         await targetCmd.preRun(targetCmd, parsed.positionals, state);
@@ -364,7 +264,10 @@ export class Command {
         await targetCmd.postRun(targetCmd, parsed.positionals, state);
       }
 
-      await targetCmd.runPersistentPostRun(parsed.positionals, state);
+      const persistentPostRun = Command.findInheritedHook(targetCmd, 'persistentPostRun');
+      if (persistentPostRun !== undefined) {
+        await persistentPostRun(targetCmd, parsed.positionals, state);
+      }
     } catch (error: unknown) {
       if (!targetCmd.silenceErrors) {
         console.error(`Error: ${Command.errorMessage(error)}`);
@@ -376,28 +279,20 @@ export class Command {
     }
   }
 
-  /**
-   * Retrieves all child commands added to this command.
-   */
+  /** Retrieves all child commands. */
   commands(): Command[] {
     return this._commands;
   }
 
-  /**
-   * Recursively traverses upwards to find the top-most (root) command in the tree.
-   */
+  /** Traverses upwards to find the top-most (root) command in the tree. */
   root(): Command {
-    if (this._parent === undefined) {
-      return this;
-    }
-    return this._parent.root();
+    return this._parent === undefined ? this : this._parent.root();
   }
 
   /**
    * Traverses the command tree based on the provided arguments to find the target subcommand.
    * Stops traversing when an argument doesn't match a subcommand or is a flag.
    *
-   * @param args The arguments to route.
    * @returns A tuple containing the target Command and the remaining un-routed arguments.
    */
   findTarget(args: string[]): [Command, string[]] {
@@ -406,36 +301,22 @@ export class Command {
       if (arg === undefined) {
         continue;
       }
-
-      // Skip flags (and their values if we were doing a full parse,
-      // but simple traversal just skips words starting with '-')
+      // Skip flag tokens; their values may incorrectly match a subcommand name
+      // but in practice collisions are rare and documented as a user concern.
       if (arg.startsWith('-')) {
         continue;
       }
-
-      // Try to find a subcommand matching this argument
-      const subCmd = this._commands.find(
-        (command) => command.name() === arg || command.aliases.includes(arg),
-      );
-
+      const subCmd = this._commands.find((c) => c.name() === arg || c.aliases.includes(arg));
       if (subCmd !== undefined) {
-        // Remove the matched subcommand from the arguments
-        const nextArgs = [...args.slice(0, i), ...args.slice(i + 1)];
-        return subCmd.findTarget(nextArgs);
-      } else {
-        // If it doesn't match a subcommand and doesn't start with '-',
-        // it must be a positional argument for the CURRENT command.
-        // We stop traversing here so it gets passed as a positional.
-        break;
+        return subCmd.findTarget([...args.slice(0, i), ...args.slice(i + 1)]);
       }
+      // Positional for the current command; stop traversing.
+      break;
     }
-
     return [this, args];
   }
 
-  /**
-   * Evaluates the `use` property to extract just the command name.
-   */
+  /** Evaluates the `use` property to extract just the command name. */
   name(): string {
     const [commandName = ''] = this.use.split(' ');
     return commandName;
@@ -443,115 +324,65 @@ export class Command {
 
   /**
    * Generates and prints the help output for this command.
-   * Automatically invoked when the `--help` flag is provided or no `run` function exists.
+   * Automatically invoked for `--help` or when no `run` function exists.
    */
-  help(args: string[] = []) {
-    void args;
+  help() {
     console.log();
-
     const description = this.long !== '' ? this.long : this.short;
     if (description !== '') {
       console.log(description);
       console.log();
     }
-
     this.usage();
   }
 
   /**
    * Generates and prints the usage summary, listing subcommands and flags.
-   * Called automatically by `help()` or when a command fails (unless `silenceUsage` is true).
+   * Called by `help()` or when a command fails (unless `silenceUsage` is true).
    */
   usage() {
     console.log('Usage:');
-    if (this._commands.length > 0) {
-      console.log(`  ${this.use} [command]`);
-    } else {
-      console.log(`  ${this.use}`);
-    }
+    console.log(`  ${this.use}${this._commands.length > 0 ? ' [command]' : ''}`);
     console.log();
 
-    const visibleCommands = this._commands;
-    if (visibleCommands.length > 0) {
-      this.printCommandGroups(visibleCommands);
+    if (this._commands.length > 0) {
+      this.printCommandGroups(this._commands);
     }
 
     const activeFlags = this.getInheritedFlags();
-    const visibleFlagKeys = Object.keys(activeFlags);
+    const flagKeys = Object.keys(activeFlags);
+    if (flagKeys.length === 0) {
+      return;
+    }
 
-    if (visibleFlagKeys.length > 0) {
-      console.log('Flags:');
-      for (const key of visibleFlagKeys) {
-        const flag = activeFlags[key];
-        if (flag === undefined) {
-          continue;
-        }
-
-        const shortPrefix = flag.short !== undefined ? `-${flag.short}, ` : '    ';
-        const defaultSuffix = Command.formatDefaultSuffix(flag.defaultValue);
-        const requiredSuffix = flag.required === true ? ' (required)' : '';
-        const description = flag.description ?? '';
-
-        console.log(
-          `  ${shortPrefix}--${key.padEnd(10)} ${description}${defaultSuffix}${requiredSuffix}`,
-        );
+    const flagPad = Math.max(...flagKeys.map((k) => k.length));
+    console.log('Flags:');
+    for (const key of flagKeys) {
+      const flag = activeFlags[key];
+      if (flag === undefined) {
+        continue;
       }
-      console.log();
+      const shortPrefix = flag.short !== undefined ? `-${flag.short}, ` : '    ';
+      const defaultSuffix = Command.formatDefaultSuffix(flag.defaultValue);
+      const requiredSuffix = flag.required === true ? ' (required)' : '';
+      const description = flag.description ?? '';
+      console.log(
+        `  ${shortPrefix}--${key.padEnd(flagPad)} ${description}${defaultSuffix}${requiredSuffix}`,
+      );
     }
+    console.log();
   }
 
-  private static createFlagDef(
-    type: FlagType,
-    short: string | undefined,
-    defaultValue: FlagDefault | undefined,
-    description: string | undefined,
-    persistent: boolean,
-  ): FlagDef {
-    const flag: FlagDef = {
-      type,
-    };
-
-    if (defaultValue !== undefined) {
-      flag.defaultValue = defaultValue;
-    }
-
-    if (description !== undefined) {
-      flag.description = description;
-    }
-
-    if (short !== undefined && short !== '') {
-      flag.short = short;
-    }
-
-    if (persistent) {
-      flag.persistent = true;
-    }
-
-    return flag;
-  }
-
-  private static buildParseOptions(flags: Record<string, FlagDef>): Record<string, ParseOption> {
-    const parseOptions: Record<string, ParseOption> = {};
-
+  private static buildParseOptions(flags: Record<string, FlagDef>): ParseArgsOptionsConfig {
+    const parseOptions: ParseArgsOptionsConfig = {};
     for (const [key, flag] of Object.entries(flags)) {
       const isBoolean = flag.type === 'boolean' || flag.type === 'booleanCount';
-      const isMultiple = flag.type === 'booleanCount';
-
-      const option: ParseOption = {
+      parseOptions[key] = {
         type: isBoolean ? 'boolean' : 'string',
+        ...(flag.short !== undefined ? { short: flag.short } : {}),
+        ...(flag.type === 'booleanCount' ? { multiple: true } : {}),
       };
-
-      if (flag.short !== undefined) {
-        option.short = flag.short;
-      }
-
-      if (isMultiple) {
-        option.multiple = true;
-      }
-
-      parseOptions[key] = option;
     }
-
     return parseOptions;
   }
 
@@ -560,19 +391,16 @@ export class Command {
     rawValues: Record<string, unknown>,
   ): Record<string, FlagValue> {
     const normalized: Record<string, FlagValue> = {};
-
     for (const [key, flag] of Object.entries(flags)) {
       const rawValue = rawValues[key];
       if (rawValue === undefined) {
         continue;
       }
-
       const parsedValue = Command.parseFlagValue(key, flag, rawValue);
       if (parsedValue !== undefined) {
         normalized[key] = parsedValue;
       }
     }
-
     return normalized;
   }
 
@@ -581,38 +409,27 @@ export class Command {
     flag: FlagDef,
     rawValue: unknown,
   ): FlagValue | undefined {
-    if (flag.type === 'string') {
-      return typeof rawValue === 'string' ? rawValue : undefined;
-    }
-
-    if (flag.type === 'integer') {
-      if (typeof rawValue !== 'string') {
-        return undefined;
+    switch (flag.type) {
+      case 'string':
+        return typeof rawValue === 'string' ? rawValue : undefined;
+      case 'boolean':
+        return typeof rawValue === 'boolean' ? rawValue : undefined;
+      case 'integer': {
+        if (typeof rawValue !== 'string') {
+          return undefined;
+        }
+        const parsed = Command.parseInteger(rawValue);
+        if (parsed === undefined) {
+          throw new Error(`invalid integer value "${rawValue}" for flag "${flagName}"`);
+        }
+        return parsed;
       }
-
-      const parsed = Command.parseInteger(rawValue);
-      if (parsed === undefined) {
-        throw new Error(`invalid integer value "${rawValue}" for flag "${flagName}"`);
-      }
-
-      return parsed;
+      case 'booleanCount':
+        if (Array.isArray(rawValue)) {
+          return rawValue.filter((e): e is boolean => e === true).length;
+        }
+        return rawValue === true ? 1 : 0;
     }
-
-    if (flag.type === 'boolean') {
-      return typeof rawValue === 'boolean' ? rawValue : undefined;
-    }
-
-    if (Array.isArray(rawValue)) {
-      if (flag.type === 'booleanCount') {
-        return rawValue.filter((entry): entry is boolean => typeof entry === 'boolean' && entry)
-          .length;
-      }
-    }
-
-    if (typeof rawValue === 'boolean' && flag.type === 'booleanCount') {
-      return rawValue ? 1 : 0;
-    }
-
     return undefined;
   }
 
@@ -621,17 +438,8 @@ export class Command {
     if (!/^[+-]?\d+$/.test(trimmed)) {
       return undefined;
     }
-
     const parsed = Number.parseInt(trimmed, 10);
     return Number.isSafeInteger(parsed) ? parsed : undefined;
-  }
-
-  private async runPersistentPreRun(positionals: string[], state: RunState) {
-    await Command.runClosestPersistentPreRun(this, this, positionals, state);
-  }
-
-  private async runPersistentPostRun(positionals: string[], state: RunState) {
-    await Command.runClosestPersistentPostRun(this, this, positionals, state);
   }
 
   private printCommandGroups(visibleCommands: Command[]) {
@@ -643,7 +451,6 @@ export class Command {
         ungrouped.push(command);
         continue;
       }
-
       const existing = grouped.get(command.groupID);
       if (existing === undefined) {
         grouped.set(command.groupID, [command]);
@@ -652,79 +459,52 @@ export class Command {
       }
     }
 
-    if (this._groups.length > 0) {
-      for (const group of this._groups) {
-        const commands = grouped.get(group.id);
-        if (commands === undefined || commands.length === 0) {
-          continue;
-        }
+    const namePad = Math.max(...visibleCommands.map((c) => c.name().length));
+    const print = (heading: string, cmds: Command[]) => {
+      console.log(`${heading}:`);
+      for (const command of cmds) {
+        console.log(`  ${command.name().padEnd(namePad)}  ${command.short}`);
+      }
+      console.log();
+    };
 
-        console.log(`${group.title}:`);
-        for (const command of commands) {
-          console.log(`  ${command.name().padEnd(15)} ${command.short}`);
-        }
-        console.log();
+    for (const group of this._groups) {
+      const cmds = grouped.get(group.id);
+      if (cmds !== undefined && cmds.length > 0) {
+        print(group.title, cmds);
       }
     }
 
     if (ungrouped.length > 0) {
-      console.log(this._groups.length > 0 ? 'Other Commands:' : 'Available Commands:');
-      for (const command of ungrouped) {
-        console.log(`  ${command.name().padEnd(15)} ${command.short}`);
-      }
-      console.log();
+      print(this._groups.length > 0 ? 'Other Commands' : 'Available Commands', ungrouped);
     }
   }
 
-  private static formatDefaultSuffix(defaultValue: FlagDefault | undefined): string {
+  private static formatDefaultSuffix(defaultValue: FlagValue | undefined): string {
     if (defaultValue === undefined || defaultValue === '' || defaultValue === false) {
       return '';
     }
-
     return ` (default ${JSON.stringify(defaultValue)})`;
   }
 
   private static errorMessage(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
-
-    return String(error);
+    return error instanceof Error ? error.message : String(error);
   }
 
-  private static async runClosestPersistentPreRun(
-    current: Command | undefined,
-    target: Command,
-    positionals: string[],
-    state: RunState,
-  ) {
-    if (current === undefined) {
-      return;
+  private static findInheritedHook(
+    start: Command,
+    key: 'persistentPreRun' | 'persistentPostRun',
+  ): RunFunc | undefined {
+    for (
+      let current: Command | undefined = start;
+      current !== undefined;
+      current = current._parent
+    ) {
+      const hook = current[key];
+      if (hook !== undefined) {
+        return hook;
+      }
     }
-
-    if (current.persistentPreRun !== undefined) {
-      await current.persistentPreRun(target, positionals, state);
-      return;
-    }
-
-    await Command.runClosestPersistentPreRun(current._parent, target, positionals, state);
-  }
-
-  private static async runClosestPersistentPostRun(
-    current: Command | undefined,
-    target: Command,
-    positionals: string[],
-    state: RunState,
-  ) {
-    if (current === undefined) {
-      return;
-    }
-
-    if (current.persistentPostRun !== undefined) {
-      await current.persistentPostRun(target, positionals, state);
-      return;
-    }
-
-    await Command.runClosestPersistentPostRun(current._parent, target, positionals, state);
+    return undefined;
   }
 }
