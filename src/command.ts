@@ -273,7 +273,7 @@ export class Command {
         console.error(`Error: ${Command.errorMessage(error)}`);
       }
       if (!targetCmd.silenceUsage) {
-        targetCmd.usage();
+        console.error(`Run '${targetCmd.name()} --help' for usage.`);
       }
       process.exitCode = 1;
     }
