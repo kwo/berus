@@ -61,7 +61,7 @@ describe('Flags (Advanced)', () => {
     const errSpy = mock.method(console, 'error', () => undefined);
 
     try {
-      await root.execute(['--count', '12abc']);
+      await assert.rejects(root.execute(['--count', '12abc']));
       assert.equal(
         errSpy.mock.calls[0]?.arguments[0],
         'Error: invalid integer value "12abc" for flag "count"',
@@ -84,7 +84,7 @@ describe('Flags (Advanced)', () => {
     const errSpy = mock.method(console, 'error', () => undefined);
 
     try {
-      await root.execute([]);
+      await assert.rejects(root.execute([]));
       assert.equal(errSpy.mock.calls[0]?.arguments[0], 'Error: required flag(s) "name" not set');
 
       errSpy.mock.resetCalls();

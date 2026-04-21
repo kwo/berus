@@ -38,4 +38,6 @@ const echoCmd = new Command({
 
 rootCmd.addCommand(versionCmd, echoCmd);
 
-void rootCmd.execute();
+rootCmd.execute().catch(() => {
+  // Error already reported by the framework; exit code is set.
+});

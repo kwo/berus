@@ -276,6 +276,7 @@ export class Command {
         console.error(`Run '${targetCmd.name()} --help' for usage.`);
       }
       process.exitCode = 1;
+      throw error;
     }
   }
 

@@ -62,10 +62,9 @@ describe('Flags Edge Cases', () => {
 
     try {
       // child2 should NOT have the 'shared' flag
-      await root.execute(['child2', '--shared', 'val']);
+      await assert.rejects(root.execute(['child2', '--shared', 'val']));
 
       // util.parseArgs throws on unknown flags when strict: true
-      // Since we swallow errors in Command and print them, we check the spy
       assert.ok(errSpy.mock.callCount() > 0);
       const errOutput = String(errSpy.mock.calls[0]?.arguments[0] ?? '');
       assert.equal(errOutput.includes('Unknown option'), true);
@@ -89,7 +88,7 @@ describe('Flags Edge Cases', () => {
     const errSpy = mock.method(console, 'error', () => undefined);
 
     try {
-      await root.execute(['child']); // Missing --name
+      await assert.rejects(root.execute(['child'])); // Missing --name
       assert.equal(errSpy.mock.calls[0]?.arguments[0], 'Error: required flag(s) "name" not set');
     } finally {
       errSpy.mock.restore();

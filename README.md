@@ -45,7 +45,9 @@ const versionCmd = new Command({
 
 rootCmd.addCommand(versionCmd);
 
-void rootCmd.execute();
+void rootCmd.execute().catch(() => {
+  // execute() rejects on failure; exit code is already set.
+});
 ```
 
 ## Features

@@ -141,7 +141,6 @@ const devDebugCmd = new Command({
 rootCmd.addCommand(serverCmd, adminCmd, legacyCmd, devDebugCmd);
 
 // --- EXECUTE ---
-// Wrapped in async IIFE since execute() is async
-void (async () => {
-  await rootCmd.execute();
-})();
+rootCmd.execute().catch(() => {
+  // Error already reported by the framework; exit code is set.
+});
