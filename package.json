@@ -30,6 +30,8 @@
     "lint:types": "tsc -p tsconfig.json",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:watch": "node --import tsx --test --watch tests/*.test.ts",
+    "example": "tsx example/main.ts",
+    "example:kitchen": "tsx example/kitchen-sink.ts",
     "prepare": "husky",
     "prepublishOnly": "npm run build"
   },

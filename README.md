@@ -100,3 +100,17 @@ Built-in validators:
 npm run test
 npm run build
 ```
+
+## Examples
+
+Two runnable examples live in `example/`:
+
+```bash
+npm run example -- --help
+npm run example -- echo hello world
+
+npm run example:kitchen -- --help
+npm run example:kitchen -- server start --port 9000 -v
+```
+
+Arguments after `--` are passed through to the example CLI.
