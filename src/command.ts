@@ -481,7 +481,7 @@ export class Command {
   }
 
   private static formatDefaultSuffix(defaultValue: FlagValue | undefined): string {
-    if (defaultValue === undefined || defaultValue === '' || defaultValue === false) {
+    if (defaultValue === undefined) {
       return '';
     }
     return ` (default ${JSON.stringify(defaultValue)})`;
