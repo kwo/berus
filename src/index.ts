@@ -3,6 +3,7 @@ export {
   RunState,
   type CommandConfig,
   type FlagConfig,
+  type RunContext,
   type RunFunc,
   type ArgsFunc,
 } from './command.js';

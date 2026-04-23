@@ -8,7 +8,7 @@ describe('RunState', () => {
 
     const root = new Command({
       use: 'root',
-      persistentPreRun: (_cmd, _args, state) => {
+      persistentPreRun: ({ state }) => {
         sequence.push('persistentPreRun');
         state.set('counter', 1);
         state.set('persistentPreRun', true);
@@ -17,25 +17,25 @@ describe('RunState', () => {
 
     const sub = new Command({
       use: 'sub',
-      preRun: (_cmd, _args, state) => {
+      preRun: ({ state }) => {
         sequence.push('preRun');
         const counter = state.get<number>('counter') ?? 0;
         state.set('counter', counter + 1);
         state.set('preRun', true);
       },
-      run: (_cmd, _args, state) => {
+      run: ({ state }) => {
         sequence.push('run');
         const counter = state.get<number>('counter') ?? 0;
         state.set('counter', counter + 1);
         state.set('run', true);
       },
-      postRun: (_cmd, _args, state) => {
+      postRun: ({ state }) => {
         sequence.push('postRun');
         const counter = state.get<number>('counter') ?? 0;
         state.set('counter', counter + 1);
         state.set('postRun', true);
       },
-      persistentPostRun: (_cmd, _args, state) => {
+      persistentPostRun: ({ state }) => {
         sequence.push('persistentPostRun');
         const counter = state.get<number>('counter') ?? 0;
         state.set('counter', counter + 1);

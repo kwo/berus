@@ -12,7 +12,7 @@ const rootCmd = new Command({
       description: 'Enable verbose output',
     },
   },
-  run: (cmd) => {
+  run: ({ cmd }) => {
     console.log('Running app!');
     if (cmd.flags().getBoolean('verbose')) {
       console.log('Verbose mode enabled.');
@@ -33,7 +33,7 @@ const echoCmd = new Command({
   use: 'echo [words...]',
   short: 'Echo back the given words',
   aliases: ['e'],
-  run: (_cmd, args) => {
+  run: ({ args }) => {
     console.log(args.join(' '));
   },
 });

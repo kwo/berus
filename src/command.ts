@@ -32,8 +32,14 @@ export class RunState {
   }
 }
 
-export type RunFunc = (cmd: Command, args: string[], state: RunState) => void | Promise<void>;
-export type ArgsFunc = (cmd: Command, args: string[]) => Error | undefined;
+export interface RunContext {
+  cmd: Command;
+  args: string[];
+  state: RunState;
+}
+
+export type RunFunc = (ctx: RunContext) => void | Promise<void>;
+export type ArgsFunc = (ctx: Omit<RunContext, 'state'>) => Error | undefined;
 type FlagType = 'string' | 'boolean' | 'integer' | 'booleanCount';
 type FlagValue = string | boolean | number;
 
@@ -235,8 +241,11 @@ export class Command {
         }
       }
 
+      const state = new RunState();
+      const runCtx: RunContext = { cmd: targetCmd, args: parsed.positionals, state };
+
       if (targetCmd.args !== undefined) {
-        const err = targetCmd.args(targetCmd, parsed.positionals);
+        const err = targetCmd.args(runCtx);
         if (err !== undefined) {
           throw err;
         }
@@ -247,26 +256,24 @@ export class Command {
         return;
       }
 
-      const state = new RunState();
-
       const persistentPreRun = Command.findInheritedHook(targetCmd, 'persistentPreRun');
       if (persistentPreRun !== undefined) {
-        await persistentPreRun(targetCmd, parsed.positionals, state);
+        await persistentPreRun(runCtx);
       }
 
       if (targetCmd.preRun !== undefined) {
-        await targetCmd.preRun(targetCmd, parsed.positionals, state);
+        await targetCmd.preRun(runCtx);
       }
 
-      await targetCmd.run(targetCmd, parsed.positionals, state);
+      await targetCmd.run(runCtx);
 
       if (targetCmd.postRun !== undefined) {
-        await targetCmd.postRun(targetCmd, parsed.positionals, state);
+        await targetCmd.postRun(runCtx);
       }
 
       const persistentPostRun = Command.findInheritedHook(targetCmd, 'persistentPostRun');
       if (persistentPostRun !== undefined) {
-        await persistentPostRun(targetCmd, parsed.positionals, state);
+        await persistentPostRun(runCtx);
       }
     } catch (error: unknown) {
       if (!targetCmd.silenceErrors) {

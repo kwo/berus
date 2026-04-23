@@ -15,7 +15,7 @@ describe('Declarative Flags', () => {
         age: { type: 'string', defaultValue: '30' },
         count: { type: 'integer', defaultValue: 1 },
       },
-      run: (c) => {
+      run: ({ cmd: c }) => {
         capturedName = c.flags().getString('name');
         capturedAge = Number(c.flags().getString('age'));
         capturedCount = c.flags().getInteger('count');
@@ -41,7 +41,7 @@ describe('Declarative Flags', () => {
 
     const sub = new Command({
       use: 'sub',
-      run: (c) => {
+      run: ({ cmd: c }) => {
         // Can access via local flags accessor due to inheritance logic
         capturedVerbose = c.flags().getBoolean('verbose');
       },

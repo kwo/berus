@@ -1,6 +1,6 @@
 {
   "name": "@kwo1/berus",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A lightweight CLI framework for TypeScript heavily inspired by Go's Cobra",
   "publishConfig": {
     "access": "public"

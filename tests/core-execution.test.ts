@@ -30,7 +30,7 @@ describe('Command Execution lifecycle and Routing', () => {
     let capturedArgs: string[] = [];
     const rootCmd = new Command({
       use: 'root',
-      run: (_cmd, args) => {
+      run: ({ args }) => {
         capturedArgs = args;
       },
     });
@@ -56,7 +56,7 @@ describe('Command Execution lifecycle and Routing', () => {
     let capturedArgs: string[] = [];
     const rootCmd = new Command({
       use: 'root',
-      run: (_cmd, args) => {
+      run: ({ args }) => {
         capturedArgs = args;
       },
     });

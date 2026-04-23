@@ -19,7 +19,7 @@ describe('Flags (Advanced)', () => {
     const subMock = mock.fn();
     const sub = new Command({
       use: 'sub',
-      run: (cmd) => {
+      run: ({ cmd }) => {
         subMock();
         capturedConfig = cmd.flags().getString('config');
       },
@@ -39,7 +39,7 @@ describe('Flags (Advanced)', () => {
       flagsConfig: {
         verbose: { type: 'booleanCount', short: 'v', defaultValue: 0 },
       },
-      run: (cmd) => {
+      run: ({ cmd }) => {
         verbosityCount = cmd.flags().getBooleanCount('verbose');
       },
     });

@@ -59,7 +59,7 @@ const startCmd = new Command({
   preRun: () => {
     console.log('[Hook] startCmd preRun: Preparing server resources...');
   },
-  run: (cmd) => {
+  run: ({ cmd }) => {
     const port = cmd.flags().getString('port');
     const verbose = cmd.flags().getBoolean('verbose'); // Access persistent flag
     console.log(`Starting server on port ${port} (verbose: ${String(verbose)})`);
@@ -83,7 +83,7 @@ const dbConfigGetCmd = new Command({
   use: 'get [key]',
   short: 'Get a specific database configuration value',
   args: ExactArgs(1),
-  run: (cmd, args) => {
+  run: ({ cmd, args }) => {
     const key = args[0] ?? '';
     const configPath = cmd.flags().getString('config'); // Access persistent flag
     console.log(`Reading DB config key "${key}" using config file: ${configPath}`);
@@ -109,7 +109,7 @@ const adminCmd = new Command({
       description: 'Force the administrative action',
     },
   },
-  run: (cmd, args) => {
+  run: ({ cmd, args }) => {
     const action = args[0];
     const targetUsers = args.slice(1);
     const force = cmd.flags().getBoolean('force');
