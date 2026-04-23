@@ -210,57 +210,50 @@ export class Command {
       description: `help for ${targetCmd.name()}`,
     };
 
-    try {
-      const parsed = parseArgs({
-        args: remainingArgs,
-        options: Command.buildParseOptions(activeFlags),
-        strict: true,
-        allowPositionals: true,
-      });
+    const parsed = parseArgs({
+      args: remainingArgs,
+      options: Command.buildParseOptions(activeFlags),
+      strict: true,
+      allowPositionals: true,
+    });
 
-      const rawValues: Record<string, unknown> = parsed.values;
-      const normalized = Command.normalizeParsedValues(activeFlags, rawValues);
-      targetCmd._flagValues = {};
-      for (const [name, value] of Object.entries(normalized)) {
-        const owner = targetCmd.flagOwner(name) ?? targetCmd;
-        owner._flagValues[name] = value;
+    const rawValues: Record<string, unknown> = parsed.values;
+    const normalized = Command.normalizeParsedValues(activeFlags, rawValues);
+    targetCmd._flagValues = {};
+    for (const [name, value] of Object.entries(normalized)) {
+      const owner = targetCmd.flagOwner(name) ?? targetCmd;
+      owner._flagValues[name] = value;
+    }
+
+    if (targetCmd.flags().getBoolean('help')) {
+      targetCmd.help();
+      return;
+    }
+
+    for (const [key, def] of Object.entries(activeFlags)) {
+      if (def.required === true && rawValues[key] === undefined) {
+        throw new Error(`required flag(s) "${key}" not set`);
       }
+    }
 
-      if (targetCmd.flags().getBoolean('help')) {
-        targetCmd.help();
-        return;
-      }
+    const state = new RunState();
+    const runCtx: RunContext = { cmd: targetCmd, args: parsed.positionals, state };
 
-      for (const [key, def] of Object.entries(activeFlags)) {
-        if (def.required === true && rawValues[key] === undefined) {
-          throw new Error(`required flag(s) "${key}" not set`);
-        }
-      }
+    if (targetCmd.run === undefined) {
+      targetCmd.help();
+      return;
+    }
 
-      const state = new RunState();
-      const runCtx: RunContext = { cmd: targetCmd, args: parsed.positionals, state };
+    const persistentPreRun = Command.findInheritedHook(targetCmd, 'persistentPreRun');
+    if (persistentPreRun !== undefined) {
+      await persistentPreRun(runCtx);
+    }
 
-      if (targetCmd.run === undefined) {
-        targetCmd.help();
-        return;
-      }
+    await targetCmd.run(runCtx);
 
-      const persistentPreRun = Command.findInheritedHook(targetCmd, 'persistentPreRun');
-      if (persistentPreRun !== undefined) {
-        await persistentPreRun(runCtx);
-      }
-
-      await targetCmd.run(runCtx);
-
-      const persistentPostRun = Command.findInheritedHook(targetCmd, 'persistentPostRun');
-      if (persistentPostRun !== undefined) {
-        await persistentPostRun(runCtx);
-      }
-    } catch (error: unknown) {
-      console.error(`Error: ${Command.errorMessage(error)}`);
-      console.error(`Run '${targetCmd.name()} --help' for usage.`);
-      process.exitCode = 1;
-      throw error;
+    const persistentPostRun = Command.findInheritedHook(targetCmd, 'persistentPostRun');
+    if (persistentPostRun !== undefined) {
+      await persistentPostRun(runCtx);
     }
   }
 
@@ -455,10 +448,6 @@ export class Command {
       return '';
     }
     return ` (default ${JSON.stringify(defaultValue)})`;
-  }
-
-  private static errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
   }
 
   private static findInheritedHook(

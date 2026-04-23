@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict';
-import { afterEach, describe, it, mock } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import { Command } from '../src/index.js';
 
 describe('Flags Edge Cases', () => {
-  afterEach(() => {
-    process.exitCode = undefined;
-  });
-
   it('local flag shadows parent persistent flag', async () => {
     const root = new Command({
       use: 'root',
@@ -58,19 +54,9 @@ describe('Flags Edge Cases', () => {
 
     root.addCommand(child1, child2);
 
-    const errSpy = mock.method(console, 'error', () => undefined);
-
-    try {
-      // child2 should NOT have the 'shared' flag
-      await assert.rejects(root.execute(['child2', '--shared', 'val']));
-
-      // util.parseArgs throws on unknown flags when strict: true
-      assert.ok(errSpy.mock.callCount() > 0);
-      const errOutput = String(errSpy.mock.calls[0]?.arguments[0] ?? '');
-      assert.equal(errOutput.includes('Unknown option'), true);
-    } finally {
-      errSpy.mock.restore();
-    }
+    // child2 should NOT have the 'shared' flag; util.parseArgs throws
+    // on unknown flags when strict: true.
+    await assert.rejects(root.execute(['child2', '--shared', 'val']), /Unknown option/);
   });
 
   it('required flag on child fails execution if missing', async () => {
@@ -85,13 +71,6 @@ describe('Flags Edge Cases', () => {
 
     root.addCommand(child);
 
-    const errSpy = mock.method(console, 'error', () => undefined);
-
-    try {
-      await assert.rejects(root.execute(['child'])); // Missing --name
-      assert.equal(errSpy.mock.calls[0]?.arguments[0], 'Error: required flag(s) "name" not set');
-    } finally {
-      errSpy.mock.restore();
-    }
+    await assert.rejects(root.execute(['child']), /required flag\(s\) "name" not set/);
   });
 });

@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict';
-import { afterEach, describe, it, mock } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import { Command } from '../src/index.js';
 
 describe('Flags (Advanced)', () => {
-  afterEach(() => {
-    process.exitCode = undefined;
-  });
-
   it('supports persistent flags', async () => {
     const root = new Command({
       use: 'root',
@@ -194,13 +190,7 @@ describe('Flags (Advanced)', () => {
     const sub = new Command({ use: 'sub', run: () => undefined });
     root.addCommand(sub);
 
-    const errSpy = mock.method(console, 'error', () => undefined);
-    try {
-      await assert.rejects(root.execute(['--typo', 'x', 'sub']));
-      assert.match(String(errSpy.mock.calls[0]?.arguments[0]), /--typo/);
-    } finally {
-      errSpy.mock.restore();
-    }
+    await assert.rejects(root.execute(['--typo', 'x', 'sub']), /--typo/);
   });
 
   it('supports boolean count flags', async () => {
@@ -228,17 +218,10 @@ describe('Flags (Advanced)', () => {
       run: () => undefined,
     });
 
-    const errSpy = mock.method(console, 'error', () => undefined);
-
-    try {
-      await assert.rejects(root.execute(['--count', '12abc']));
-      assert.equal(
-        errSpy.mock.calls[0]?.arguments[0],
-        'Error: invalid integer value "12abc" for flag "count"',
-      );
-    } finally {
-      errSpy.mock.restore();
-    }
+    await assert.rejects(
+      root.execute(['--count', '12abc']),
+      /invalid integer value "12abc" for flag "count"/,
+    );
   });
 
   it('enforces required flags', async () => {
@@ -250,17 +233,7 @@ describe('Flags (Advanced)', () => {
       run: () => undefined,
     });
 
-    const errSpy = mock.method(console, 'error', () => undefined);
-
-    try {
-      await assert.rejects(root.execute([]));
-      assert.equal(errSpy.mock.calls[0]?.arguments[0], 'Error: required flag(s) "name" not set');
-
-      errSpy.mock.resetCalls();
-      await root.execute(['--name', 'karl']);
-      assert.equal(errSpy.mock.callCount(), 0);
-    } finally {
-      errSpy.mock.restore();
-    }
+    await assert.rejects(root.execute([]), /required flag\(s\) "name" not set/);
+    await root.execute(['--name', 'karl']);
   });
 });

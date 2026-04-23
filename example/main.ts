@@ -39,6 +39,7 @@ const echoCmd = new Command({
 
 rootCmd.addCommand(versionCmd, echoCmd);
 
-rootCmd.execute().catch(() => {
-  // Error already reported by the framework; exit code is set.
+rootCmd.execute().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
 });
