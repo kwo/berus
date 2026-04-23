@@ -4,7 +4,4 @@ export {
   type CommandConfig,
   type FlagConfig,
   type RunContext,
-  type RunFunc,
-  type ArgsFunc,
 } from './command.js';
-export { ExactArgs, MinimumNArgs, MaximumNArgs, NoArgs } from './args.js';

@@ -3,7 +3,6 @@ import { Command } from '../src/index.js';
 const rootCmd = new Command({
   use: 'app',
   short: 'App is a fast CLI',
-  long: 'A longer description of App showing how it works.',
   flagsConfig: {
     verbose: {
       type: 'boolean',

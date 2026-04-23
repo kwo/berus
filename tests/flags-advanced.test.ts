@@ -71,7 +71,6 @@ describe('Flags (Advanced)', () => {
         // `cmd` is the target child, but the value should still be readable
         // because flags() walks up to the declaring ancestor.
         rootPreRunValues.child = cmd.flags().getString('database');
-        rootPreRunValues.root = cmd.root().flags().getString('database');
       },
     });
     const child = new Command({ use: 'child', run: () => undefined });
@@ -79,7 +78,6 @@ describe('Flags (Advanced)', () => {
 
     await root.execute(['child', '--database', '/tmp/x.db']);
     assert.equal(rootPreRunValues.child, '/tmp/x.db');
-    assert.equal(rootPreRunValues.root, '/tmp/x.db');
     // The value should physically live on root, not on the child.
     assert.equal(root.flags().getString('database'), '/tmp/x.db');
   });
@@ -189,7 +187,6 @@ describe('Flags (Advanced)', () => {
   it('reports unknown flags before the subcommand with a predictable error', async () => {
     const root = new Command({
       use: 'root',
-      silenceUsage: true,
       persistentFlagsConfig: {
         config: { type: 'string', short: 'c', defaultValue: '', description: 'config file' },
       },
@@ -225,7 +222,6 @@ describe('Flags (Advanced)', () => {
   it('rejects invalid integer values', async () => {
     const root = new Command({
       use: 'root',
-      silenceUsage: true,
       flagsConfig: {
         count: { type: 'integer', defaultValue: 0, description: 'count' },
       },
@@ -248,7 +244,6 @@ describe('Flags (Advanced)', () => {
   it('enforces required flags', async () => {
     const root = new Command({
       use: 'root',
-      silenceUsage: true,
       flagsConfig: {
         name: { type: 'string', short: 'n', defaultValue: '', description: 'name', required: true },
       },

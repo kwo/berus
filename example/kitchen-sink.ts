@@ -1,12 +1,9 @@
-import { Command, ExactArgs, MinimumNArgs } from '../src/index.js';
+import { Command } from '../src/index.js';
 
 // --- ROOT COMMAND ---
 const rootCmd = new Command({
   use: 'mycli',
   short: 'A comprehensive CLI tool',
-  long: 'MyCLI demonstrates all the advanced features of the berus library.',
-  example: '  mycli server start --port 8080\n  mycli config get database.url',
-  silenceErrors: true, // We will handle errors gracefully if we want, or rely on the framework
   persistentFlagsConfig: {
     config: {
       type: 'string',
@@ -15,10 +12,10 @@ const rootCmd = new Command({
       description: 'Path to config file',
     },
     verbose: {
-      type: 'boolean',
+      type: 'booleanCount',
       short: 'v',
-      defaultValue: false,
-      description: 'Enable verbose logging',
+      defaultValue: 0,
+      description: 'Enable verbose logging (-v, -vv, -vvv)',
     },
   },
   persistentPreRun: () => {
@@ -29,18 +26,13 @@ const rootCmd = new Command({
   },
 });
 
-// Group definitions for help output
-rootCmd.addGroup('server', 'Server Operations');
-rootCmd.addGroup('admin', 'Administrative Commands');
-
 // --- SERVER SUBCOMMAND (Level 1) ---
 const serverCmd = new Command({
   use: 'server',
   aliases: ['srv', 'daemon'],
   short: 'Manage the application server',
-  groupID: 'server',
-  run: () => {
-    console.log('Use a subcommand: start, stop, or db');
+  run: ({ cmd }) => {
+    cmd.help();
   },
 });
 
@@ -50,19 +42,16 @@ const startCmd = new Command({
   short: 'Start the server',
   flagsConfig: {
     port: {
-      type: 'string',
+      type: 'integer',
       short: 'p',
-      defaultValue: '8080',
+      defaultValue: 8080,
       description: 'Port to listen on',
     },
   },
-  preRun: () => {
-    console.log('[Hook] startCmd preRun: Preparing server resources...');
-  },
   run: ({ cmd }) => {
-    const port = cmd.flags().getString('port');
-    const verbose = cmd.flags().getBoolean('verbose'); // Access persistent flag
-    console.log(`Starting server on port ${port} (verbose: ${String(verbose)})`);
+    const port = cmd.flags().getInteger('port');
+    const verbosity = cmd.flags().getBooleanCount('verbose');
+    console.log(`Starting server on port ${String(port)} (verbosity: ${String(verbosity)})`);
   },
 });
 
@@ -82,15 +71,16 @@ const dbConfigCmd = new Command({
 const dbConfigGetCmd = new Command({
   use: 'get [key]',
   short: 'Get a specific database configuration value',
-  args: ExactArgs(1),
   run: ({ cmd, args }) => {
+    if (args.length !== 1) {
+      throw new Error(`accepts 1 arg(s), received ${String(args.length)}`);
+    }
     const key = args[0] ?? '';
-    const configPath = cmd.flags().getString('config'); // Access persistent flag
+    const configPath = cmd.flags().getString('config');
     console.log(`Reading DB config key "${key}" using config file: ${configPath}`);
   },
 });
 
-// Assemble the nested server tree: root -> server -> db -> config -> get
 dbConfigCmd.addCommand(dbConfigGetCmd);
 dbCmd.addCommand(dbConfigCmd);
 serverCmd.addCommand(startCmd, dbCmd);
@@ -99,8 +89,6 @@ serverCmd.addCommand(startCmd, dbCmd);
 const adminCmd = new Command({
   use: 'admin [action] [users...]',
   short: 'Run administrative tasks',
-  groupID: 'admin',
-  args: MinimumNArgs(1),
   flagsConfig: {
     force: {
       type: 'boolean',
@@ -110,6 +98,9 @@ const adminCmd = new Command({
     },
   },
   run: ({ cmd, args }) => {
+    if (args.length < 1) {
+      throw new Error(`requires at least 1 arg(s), only received ${String(args.length)}`);
+    }
     const action = args[0];
     const targetUsers = args.slice(1);
     const force = cmd.flags().getBoolean('force');
@@ -121,24 +112,7 @@ const adminCmd = new Command({
   },
 });
 
-// --- EXTRA COMMANDS ---
-const legacyCmd = new Command({
-  use: 'legacy-sync',
-  short: 'Old sync method',
-  run: () => {
-    console.log('Running legacy sync...');
-  },
-});
-
-const devDebugCmd = new Command({
-  use: 'dev-debug',
-  short: 'Internal debug tool',
-  run: () => {
-    console.log('Secret developer debug info printed here.');
-  },
-});
-// Assemble root children
-rootCmd.addCommand(serverCmd, adminCmd, legacyCmd, devDebugCmd);
+rootCmd.addCommand(serverCmd, adminCmd);
 
 // --- EXECUTE ---
 rootCmd.execute().catch(() => {

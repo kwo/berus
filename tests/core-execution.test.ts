@@ -97,14 +97,8 @@ describe('Command Execution lifecycle and Routing', () => {
       persistentPreRun: () => {
         execOrder.push('child:persistentPreRun');
       },
-      preRun: () => {
-        execOrder.push('child:preRun');
-      },
       run: () => {
         execOrder.push('child:run');
-      },
-      postRun: () => {
-        execOrder.push('child:postRun');
       },
       persistentPostRun: () => {
         execOrder.push('child:persistentPostRun');
@@ -113,19 +107,11 @@ describe('Command Execution lifecycle and Routing', () => {
 
     root.addCommand(child);
 
-    // When running child, child's persistentPreRun overrides root's because it searches upwards
-    // Wait, let's look at the implementation of runClosestPersistentPreRun:
-    // It starts at `this` (the executing command) and traverses up to find the *first* defined hook.
-    // So if child has one, root's is ignored.
+    // The closest persistent hook to the executing command wins; root's
+    // definitions are shadowed when the child also defines them.
     await root.execute(['child']);
 
-    assert.deepEqual(execOrder, [
-      'child:persistentPreRun',
-      'child:preRun',
-      'child:run',
-      'child:postRun',
-      'child:persistentPostRun',
-    ]);
+    assert.deepEqual(execOrder, ['child:persistentPreRun', 'child:run', 'child:persistentPostRun']);
   });
 
   it('executes parent persistent hooks when child does not define them', async () => {
@@ -143,9 +129,6 @@ describe('Command Execution lifecycle and Routing', () => {
 
     const child = new Command({
       use: 'child',
-      preRun: () => {
-        execOrder.push('child:preRun');
-      },
       run: () => {
         execOrder.push('child:run');
       },
@@ -155,11 +138,6 @@ describe('Command Execution lifecycle and Routing', () => {
 
     await root.execute(['child']);
 
-    assert.deepEqual(execOrder, [
-      'root:persistentPreRun', // Inherited from root
-      'child:preRun',
-      'child:run',
-      'root:persistentPostRun', // Inherited from root
-    ]);
+    assert.deepEqual(execOrder, ['root:persistentPreRun', 'child:run', 'root:persistentPostRun']);
   });
 });

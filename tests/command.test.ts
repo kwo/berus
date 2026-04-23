@@ -53,26 +53,14 @@ describe('Command', () => {
 
     const sub = new Command({
       use: 'sub',
-      preRun: () => {
-        order.push('sub_preRun');
-      },
       run: () => {
         order.push('sub_run');
-      },
-      postRun: () => {
-        order.push('sub_postRun');
       },
     });
     root.addCommand(sub);
 
     await root.execute(['sub']);
 
-    assert.deepEqual(order, [
-      'root_persistentPreRun',
-      'sub_preRun',
-      'sub_run',
-      'sub_postRun',
-      'root_persistentPostRun',
-    ]);
+    assert.deepEqual(order, ['root_persistentPreRun', 'sub_run', 'root_persistentPostRun']);
   });
 });

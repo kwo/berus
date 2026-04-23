@@ -2,7 +2,7 @@
 
 A lightweight CLI framework for TypeScript inspired by Go's [Cobra](https://github.com/spf13/cobra).
 
-`@kwo1/berus` provides a tree-based command API for building Node.js CLIs, with lifecycle hooks, argument validators, and declarative flags.
+`@kwo1/berus` provides a tree-based command API for building Node.js CLIs, with persistent lifecycle hooks and declarative flags.
 
 ## Install
 
@@ -58,9 +58,7 @@ Define parent/child commands and route execution by CLI args.
 ### Execution Lifecycle Hooks
 Hooks run in this order:
 - `persistentPreRun`
-- `preRun`
 - `run`
-- `postRun`
 - `persistentPostRun`
 
 ### RunState (Shared Hook State)
@@ -80,19 +78,11 @@ Supported flag types:
 ### Required Flags
 Set `required: true` in flag config to enforce presence before command run.
 
-### Argument Validation
-Built-in validators:
-- `NoArgs()`
-- `ExactArgs(n)`
-- `MinimumNArgs(n)`
-- `MaximumNArgs(n)`
-
 ### Help & Usage Output
-`berus` auto-generates usage/help output from command metadata (`use`, `short`, `long`, `example`) and command tree structure.
+`berus` auto-generates usage/help output from command metadata (`use`, `short`) and command tree structure.
 
-### Command Groups & Aliases
-- Organize help output with `addGroup()` + `groupID`
-- Add alternate command names with `aliases`
+### Aliases
+Add alternate command names with `aliases`.
 
 ## Development
 

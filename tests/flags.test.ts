@@ -74,7 +74,7 @@ describe('Flags Edge Cases', () => {
   });
 
   it('required flag on child fails execution if missing', async () => {
-    const root = new Command({ use: 'root', silenceUsage: true });
+    const root = new Command({ use: 'root' });
     const child = new Command({
       use: 'child',
       flagsConfig: {

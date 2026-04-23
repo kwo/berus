@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import { Command, RunState } from '../src/index.js';
 
 describe('RunState', () => {
-  it('passes state sequentially to all lifecycle methods', async () => {
+  it('passes state sequentially through persistent hooks and run', async () => {
     const sequence: string[] = [];
 
     const root = new Command({
@@ -13,28 +13,6 @@ describe('RunState', () => {
         state.set('counter', 1);
         state.set('persistentPreRun', true);
       },
-    });
-
-    const sub = new Command({
-      use: 'sub',
-      preRun: ({ state }) => {
-        sequence.push('preRun');
-        const counter = state.get<number>('counter') ?? 0;
-        state.set('counter', counter + 1);
-        state.set('preRun', true);
-      },
-      run: ({ state }) => {
-        sequence.push('run');
-        const counter = state.get<number>('counter') ?? 0;
-        state.set('counter', counter + 1);
-        state.set('run', true);
-      },
-      postRun: ({ state }) => {
-        sequence.push('postRun');
-        const counter = state.get<number>('counter') ?? 0;
-        state.set('counter', counter + 1);
-        state.set('postRun', true);
-      },
       persistentPostRun: ({ state }) => {
         sequence.push('persistentPostRun');
         const counter = state.get<number>('counter') ?? 0;
@@ -43,22 +21,24 @@ describe('RunState', () => {
 
         // Assert the final state here to ensure it's the exact same object
         assert.equal(state.get<boolean>('persistentPreRun'), true);
-        assert.equal(state.get<boolean>('preRun'), true);
         assert.equal(state.get<boolean>('run'), true);
-        assert.equal(state.get<boolean>('postRun'), true);
+      },
+    });
+
+    const sub = new Command({
+      use: 'sub',
+      run: ({ state }) => {
+        sequence.push('run');
+        const counter = state.get<number>('counter') ?? 0;
+        state.set('counter', counter + 1);
+        state.set('run', true);
       },
     });
 
     root.addCommand(sub);
     await root.execute(['sub']);
 
-    assert.deepEqual(sequence, [
-      'persistentPreRun',
-      'preRun',
-      'run',
-      'postRun',
-      'persistentPostRun',
-    ]);
+    assert.deepEqual(sequence, ['persistentPreRun', 'run', 'persistentPostRun']);
   });
 
   it('provides working set/get/has/delete/clear methods', () => {
