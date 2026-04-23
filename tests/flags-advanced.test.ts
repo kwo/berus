@@ -32,6 +32,156 @@ describe('Flags (Advanced)', () => {
     assert.equal(capturedConfig, 'test.json');
   });
 
+  it('supports persistent flags placed before the subcommand name', async () => {
+    const root = new Command({
+      use: 'root',
+      persistentFlagsConfig: {
+        config: { type: 'string', short: 'c', defaultValue: '', description: 'config file' },
+      },
+    });
+
+    let capturedConfig = '';
+    const subMock = mock.fn();
+    const sub = new Command({
+      use: 'sub',
+      flagsConfig: {
+        name: { type: 'string', defaultValue: '', description: 'name' },
+      },
+      run: ({ cmd }) => {
+        subMock();
+        capturedConfig = cmd.flags().getString('config');
+      },
+    });
+    root.addCommand(sub);
+
+    await root.execute(['--config', 'test.json', 'sub', '--name', 'karl']);
+
+    assert.equal(subMock.mock.callCount(), 1);
+    assert.equal(capturedConfig, 'test.json');
+  });
+
+  it('routes persistent flags through multiple levels of subcommands', async () => {
+    const root = new Command({
+      use: 'root',
+      persistentFlagsConfig: {
+        database: { type: 'string', defaultValue: '', description: 'db path' },
+      },
+    });
+    const feed = new Command({ use: 'feed' });
+    const listMock = mock.fn();
+    let captured = '';
+    const list = new Command({
+      use: 'list',
+      run: ({ cmd }) => {
+        listMock();
+        captured = cmd.flags().getString('database');
+      },
+    });
+    feed.addCommand(list);
+    root.addCommand(feed);
+
+    await root.execute(['--database', '/tmp/x.db', 'feed', 'list']);
+    assert.equal(listMock.mock.callCount(), 1);
+    assert.equal(captured, '/tmp/x.db');
+  });
+
+  it('routes correctly with inline --flag=value before the subcommand', async () => {
+    const root = new Command({
+      use: 'root',
+      persistentFlagsConfig: {
+        config: { type: 'string', short: 'c', defaultValue: '', description: 'config file' },
+      },
+    });
+
+    let captured = '';
+    const sub = new Command({
+      use: 'sub',
+      flagsConfig: { name: { type: 'string', defaultValue: '', description: 'name' } },
+      run: ({ cmd }) => {
+        captured = cmd.flags().getString('config');
+      },
+    });
+    root.addCommand(sub);
+
+    await root.execute(['--config=test.json', 'sub', '--name', 'karl']);
+    assert.equal(captured, 'test.json');
+  });
+
+  it('routes correctly with short flag and value before the subcommand', async () => {
+    const root = new Command({
+      use: 'root',
+      persistentFlagsConfig: {
+        config: { type: 'string', short: 'c', defaultValue: '', description: 'config file' },
+      },
+    });
+
+    let captured = '';
+    const sub = new Command({
+      use: 'sub',
+      run: ({ cmd }) => {
+        captured = cmd.flags().getString('config');
+      },
+    });
+    root.addCommand(sub);
+
+    await root.execute(['-c', 'test.json', 'sub']);
+    assert.equal(captured, 'test.json');
+  });
+
+  it('does not consume the subcommand as a value for booleanCount flags', async () => {
+    const root = new Command({
+      use: 'root',
+      persistentFlagsConfig: {
+        verbose: { type: 'booleanCount', short: 'v', defaultValue: 0, description: 'verbosity' },
+      },
+    });
+
+    const subMock = mock.fn();
+    const sub = new Command({ use: 'sub', run: () => subMock() });
+    root.addCommand(sub);
+
+    await root.execute(['-v', 'sub']);
+    assert.equal(subMock.mock.callCount(), 1);
+  });
+
+  it('treats `--` as a routing terminator', async () => {
+    const rootMock = mock.fn();
+    let remaining: string[] = [];
+    const root = new Command({
+      use: 'root',
+      run: ({ args }) => {
+        rootMock();
+        remaining = args;
+      },
+    });
+    const sub = new Command({ use: 'sub', run: () => undefined });
+    root.addCommand(sub);
+
+    await root.execute(['--', 'sub', '--name', 'karl']);
+    assert.equal(rootMock.mock.callCount(), 1);
+    assert.deepEqual(remaining, ['sub', '--name', 'karl']);
+  });
+
+  it('reports unknown flags before the subcommand with a predictable error', async () => {
+    const root = new Command({
+      use: 'root',
+      silenceUsage: true,
+      persistentFlagsConfig: {
+        config: { type: 'string', short: 'c', defaultValue: '', description: 'config file' },
+      },
+    });
+    const sub = new Command({ use: 'sub', run: () => undefined });
+    root.addCommand(sub);
+
+    const errSpy = mock.method(console, 'error', () => undefined);
+    try {
+      await assert.rejects(root.execute(['--typo', 'x', 'sub']));
+      assert.match(String(errSpy.mock.calls[0]?.arguments[0]), /--typo/);
+    } finally {
+      errSpy.mock.restore();
+    }
+  });
+
   it('supports boolean count flags', async () => {
     let verbosityCount = 0;
     const root = new Command({

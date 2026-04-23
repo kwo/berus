@@ -304,14 +304,25 @@ export class Command {
    * @returns A tuple containing the target Command and the remaining un-routed arguments.
    */
   findTarget(args: string[]): [Command, string[]] {
+    const flags = this.getInheritedFlags();
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
       if (arg === undefined) {
         continue;
       }
-      // Skip flag tokens; their values may incorrectly match a subcommand name
-      // but in practice collisions are rare and documented as a user concern.
+      if (arg === '--') {
+        break;
+      }
       if (arg.startsWith('-')) {
+        // For `--flag value` / `-f value` forms, also skip the value token so it
+        // isn't misread as a positional subcommand name.
+        if (!arg.includes('=')) {
+          const name = arg.startsWith('--') ? arg.slice(2) : arg.slice(1);
+          const def = flags[name] ?? Object.values(flags).find((f) => f.short === name);
+          if (def !== undefined && def.type !== 'boolean' && def.type !== 'booleanCount') {
+            i++;
+          }
+        }
         continue;
       }
       const subCmd = this._commands.find((c) => c.name() === arg || c.aliases.includes(arg));
