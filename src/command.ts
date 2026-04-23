@@ -135,7 +135,17 @@ export class Command {
 
   constructor(config?: CommandConfig) {
     Object.assign(this, config);
+    this.refreshFlags();
+  }
 
+  /**
+   * Rebuilds this command's internal flag registry from `flagsConfig` and
+   * `persistentFlagsConfig`. Call this after mutating either config object
+   * at runtime (for example, from plugins that register flags on the root
+   * command after construction).
+   */
+  refreshFlags() {
+    this._flags = {};
     for (const [name, def] of Object.entries(this.flagsConfig ?? {})) {
       this._flags[name] = { ...def };
     }
@@ -165,8 +175,10 @@ export class Command {
 
   /** Returns a flag accessor used to retrieve parsed flag values. */
   flags(): FlagAccessor {
-    const read = (name: string): FlagValue | undefined =>
-      this._flagValues[name] ?? this._flags[name]?.defaultValue;
+    const read = (name: string): FlagValue | undefined => {
+      const owner = this.flagOwner(name) ?? this;
+      return owner._flagValues[name] ?? owner._flags[name]?.defaultValue;
+    };
     return {
       getString: (name) => {
         const v = read(name);
@@ -205,6 +217,24 @@ export class Command {
   }
 
   /**
+   * Locates the command that declares the given flag. Returns this command when
+   * the flag is local, an ancestor when the flag is inherited via persistence,
+   * or undefined when the flag is not declared anywhere in the chain.
+   */
+  private flagOwner(name: string): Command | undefined {
+    if (this._flags[name] !== undefined) {
+      return this;
+    }
+    for (let current = this._parent; current !== undefined; current = current._parent) {
+      const def = current._flags[name];
+      if (def?.persistent === true) {
+        return current;
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Primary entry point for executing the CLI. Routes arguments to the target
    * subcommand, parses flags, validates arguments, and runs lifecycle hooks.
    */
@@ -228,9 +258,14 @@ export class Command {
       });
 
       const rawValues: Record<string, unknown> = parsed.values;
-      targetCmd._flagValues = Command.normalizeParsedValues(activeFlags, rawValues);
+      const normalized = Command.normalizeParsedValues(activeFlags, rawValues);
+      targetCmd._flagValues = {};
+      for (const [name, value] of Object.entries(normalized)) {
+        const owner = targetCmd.flagOwner(name) ?? targetCmd;
+        owner._flagValues[name] = value;
+      }
 
-      if (targetCmd._flagValues.help === true) {
+      if (targetCmd.flags().getBoolean('help')) {
         targetCmd.help();
         return;
       }
@@ -373,28 +408,41 @@ export class Command {
       this.printCommandGroups(this._commands);
     }
 
-    const activeFlags = this.getInheritedFlags();
-    const flagKeys = Object.keys(activeFlags);
-    if (flagKeys.length === 0) {
-      return;
+    const localFlags: Record<string, FlagDef> = {};
+    const globalFlags: Record<string, FlagDef> = {};
+    for (const [key, def] of Object.entries(this.getInheritedFlags())) {
+      if (this._flags[key] !== undefined) {
+        localFlags[key] = def;
+      } else {
+        globalFlags[key] = def;
+      }
     }
 
-    const flagPad = Math.max(...flagKeys.map((k) => k.length));
-    console.log('Flags:');
-    for (const key of flagKeys) {
-      const flag = activeFlags[key];
-      if (flag === undefined) {
-        continue;
+    const printFlagSection = (title: string, flags: Record<string, FlagDef>): void => {
+      const keys = Object.keys(flags);
+      if (keys.length === 0) {
+        return;
       }
-      const shortPrefix = flag.short !== undefined ? `-${flag.short}, ` : '    ';
-      const defaultSuffix = Command.formatDefaultSuffix(flag.defaultValue);
-      const requiredSuffix = flag.required === true ? ' (required)' : '';
-      const description = flag.description ?? '';
-      console.log(
-        `  ${shortPrefix}--${key.padEnd(flagPad)} ${description}${defaultSuffix}${requiredSuffix}`,
-      );
-    }
-    console.log();
+      const pad = Math.max(...keys.map((k) => k.length));
+      console.log(`${title}:`);
+      for (const key of keys) {
+        const flag = flags[key];
+        if (flag === undefined) {
+          continue;
+        }
+        const shortPrefix = flag.short !== undefined ? `-${flag.short}, ` : '    ';
+        const defaultSuffix = Command.formatDefaultSuffix(flag.defaultValue);
+        const requiredSuffix = flag.required === true ? ' (required)' : '';
+        const description = flag.description ?? '';
+        console.log(
+          `  ${shortPrefix}--${key.padEnd(pad)} ${description}${defaultSuffix}${requiredSuffix}`,
+        );
+      }
+      console.log();
+    };
+
+    printFlagSection('Flags', localFlags);
+    printFlagSection('Global Flags', globalFlags);
   }
 
   private static buildParseOptions(flags: Record<string, FlagDef>): ParseArgsOptionsConfig {

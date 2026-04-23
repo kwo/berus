@@ -60,6 +60,30 @@ describe('Flags (Advanced)', () => {
     assert.equal(capturedConfig, 'test.json');
   });
 
+  it('stores persistent flag values on the declaring ancestor', async () => {
+    const rootPreRunValues: Record<string, string> = {};
+    const root = new Command({
+      use: 'root',
+      persistentFlagsConfig: {
+        database: { type: 'string', defaultValue: '', description: 'db path' },
+      },
+      persistentPreRun: ({ cmd }) => {
+        // `cmd` is the target child, but the value should still be readable
+        // because flags() walks up to the declaring ancestor.
+        rootPreRunValues.child = cmd.flags().getString('database');
+        rootPreRunValues.root = cmd.root().flags().getString('database');
+      },
+    });
+    const child = new Command({ use: 'child', run: () => undefined });
+    root.addCommand(child);
+
+    await root.execute(['child', '--database', '/tmp/x.db']);
+    assert.equal(rootPreRunValues.child, '/tmp/x.db');
+    assert.equal(rootPreRunValues.root, '/tmp/x.db');
+    // The value should physically live on root, not on the child.
+    assert.equal(root.flags().getString('database'), '/tmp/x.db');
+  });
+
   it('routes persistent flags through multiple levels of subcommands', async () => {
     const root = new Command({
       use: 'root',
