@@ -328,11 +328,17 @@ export class Command {
     console.log();
 
     if (this._commands.length > 0) {
-      const namePad = Math.max(...this._commands.map((c) => c.name().length));
+      const commandDisplayName = (command: Command): string => {
+        if (command.aliases.length === 0) {
+          return command.name();
+        }
+        return `${command.name()} (${command.aliases.join(', ')})`;
+      };
+
+      const namePad = Math.max(...this._commands.map((c) => commandDisplayName(c).length));
       console.log('Available Commands:');
       for (const command of this._commands) {
-        const aliases = command.aliases.length > 0 ? ` (${command.aliases.join(', ')})` : '';
-        console.log(`  ${command.name().padEnd(namePad)}  ${command.short}${aliases}`);
+        console.log(`  ${commandDisplayName(command).padEnd(namePad)}  ${command.short}`);
       }
       console.log();
     }

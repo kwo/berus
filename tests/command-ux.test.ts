@@ -38,6 +38,23 @@ describe('Command UX', () => {
     }
   });
 
+  it('shows subcommand aliases next to command name before description', () => {
+    const root = new Command({ use: 'root' });
+    const child = new Command({ use: 'child', aliases: ['kid', 'boy'], short: 'child command' });
+    root.addCommand(child);
+
+    const logSpy = mock.method(console, 'log', () => undefined);
+    try {
+      root.help();
+      const logs = logSpy.mock.calls.map((call) => String(call.arguments[0])).join('\n');
+
+      assert.match(logs, /child \(kid, boy\)\s+child command/);
+      assert.equal(logs.includes('child command (kid, boy)'), false);
+    } finally {
+      logSpy.mock.restore();
+    }
+  });
+
   it('refreshFlags rebuilds internal flag registry after mutating config', async () => {
     const root = new Command({ use: 'root' });
     root.persistentFlagsConfig = {
